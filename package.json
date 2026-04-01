@@ -8,13 +8,17 @@
   "scripts": {
     "start": "bun run src/index.tsx",
     "search": "bun run src/index.tsx search",
-    "preview": "bun run src/index.tsx preview"
+    "preview": "bun run src/index.tsx preview",
+    "build:release": "bun run scripts/build-release.ts",
+    "generate:formula": "bun run scripts/generate-homebrew-formula.ts",
+    "release:prepare": "bun run build:release && bun run generate:formula"
   },
   "dependencies": {
     "ink": "^5.2.0",
     "react": "^18.3.1",
     "commander": "^13.1.0",
-    "chalk": "^5.4.1"
+    "chalk": "^5.4.1",
+    "react-devtools-core": "^6.1.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

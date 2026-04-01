@@ -6,7 +6,16 @@
 
 Claude Code 的 buddy 系统通过 `hash(userId + SALT)` 确定性地生成宠物属性。本工具可以搜索数百万个 salt 值，找到能产生你梦想宠物的组合，然后一键应用到本地 Claude Code 二进制文件中。
 
-## 快速开始
+## 安装
+
+```bash
+# Homebrew（首个带 tag 的 release 发布后可用）
+brew install https://raw.githubusercontent.com/Snychng/cc-buddy-forge/main/Formula/ccbf.rb
+```
+
+或者从 GitHub Releases 下载对应平台的压缩包，解压后将 `ccbf` 放到你的 `PATH` 中。
+
+## 本地开发安装
 
 ```bash
 # 前置条件：Bun >= 1.0
@@ -164,6 +173,13 @@ bun run preview   # 等同于：bun run src/index.tsx preview
 bun run tsc --noEmit
 ```
 
+## 发布流程
+
+1. 更新 `package.json` 中的版本号。
+2. 推送类似 `v1.2.3` 的 tag。
+3. GitHub Actions 会构建 macOS arm64/x64 与 Linux x64 二进制，创建 GitHub Release，并上传 checksum 与自动生成的 Homebrew formula。
+4. 工作流还会自动更新 `main` 分支上的 `Formula/ccbf.rb`，因此 Homebrew 安装地址始终指向最新 release。
+
 ## 注意事项
 
 - 需要 Bun（不支持 Node）— 哈希函数使用 `Bun.hash` 以确保与 Claude Code 完全一致
@@ -171,3 +187,4 @@ bun run tsc --noEmit
 - 原始二进制 salt 会保存在 `~/.ccbf.json`
 - 仅修改本地安装，不影响其他用户
 - `patch` 命令修改 `~/.local/share/claude/versions/` 下的 Claude Code 二进制文件
+- `Formula/ccbf.rb` 会在首个带 tag 的 release 后由工作流自动生成
