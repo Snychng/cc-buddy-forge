@@ -1,5 +1,11 @@
 # cc-buddy-forge (ccbf)
 
+<p align="center">
+  <img src="./assets/ccbf-pixel-buddy.svg" width="220" alt="像素风 cc-buddy-forge 形象，正在挥锤锻造 salt" />
+</p>
+
+<p align="center"><strong>一锤一锤，把理想中的 Claude Code 宠物锻造出来。</strong></p>
+
 [English](./README.md) | 中文
 
 通过暴力搜索 salt 值，锻造你理想中的 Claude Code 宠物伴侣。

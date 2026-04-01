@@ -1,5 +1,11 @@
 # cc-buddy-forge (ccbf)
 
+<p align="center">
+  <img src="./assets/ccbf-pixel-buddy.svg" width="220" alt="Pixel-art cc-buddy-forge mascot forging salt with a hammer" />
+</p>
+
+<p align="center"><strong>Forge your ideal Claude Code buddy, one salt at a time.</strong></p>
+
 English | [中文](./README.zh-CN.md)
 
 Forge your ideal Claude Code buddy by brute-forcing the perfect salt value.
