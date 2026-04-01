@@ -9,6 +9,7 @@ type Props = {
   userId: string
   filter: SearchFilter
   total: number
+  saltLen?: number
   onDone?: (results: SearchResult[]) => void
 }
 
@@ -24,7 +25,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
   )
 }
 
-export function SearchView({ userId, filter, total, onDone }: Props) {
+export function SearchView({ userId, filter, total, saltLen, onDone }: Props) {
   const [progress, setProgress] = useState<SearchProgress>({
     current: 0, total, matches: [], speed: 0,
   })
@@ -35,6 +36,7 @@ export function SearchView({ userId, filter, total, onDone }: Props) {
       userId,
       filter,
       total,
+      saltLen,
       onProgress: setProgress,
     }).then(results => {
       setDone(true)

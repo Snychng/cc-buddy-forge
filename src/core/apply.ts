@@ -13,8 +13,8 @@ const CC_SOURCE_DEFAULT = join(
 const COMPANION_PATH = 'src/buddy/companion.ts'
 const SALT_REGEX = /const SALT = '([^']+)'/
 
-export const ORIGINAL_SALT = 'friend-2026-401'
-const ORIGINAL_SALT_LEN = ORIGINAL_SALT.length // 15
+/** Known default salt — used as fallback when binary detection fails */
+export const FALLBACK_SALT = 'friend-2026-401'
 
 // ── Binary (installed via install.sh) ──
 
@@ -31,23 +31,45 @@ export function findClaudeBinary(): string | null {
 }
 
 /**
+ * Detect the current salt from the Claude Code binary.
+ * Searches for known salt patterns: "friend-XXXX-XXX" or "ccbf-XXXXXXXXXX".
+ * Returns the salt string and its byte length.
+ */
+export function detectBinarySalt(binaryPath?: string): { salt: string; length: number } | null {
+  const filePath = binaryPath ?? findClaudeBinary()
+  if (!filePath || !existsSync(filePath)) return null
+
+  const buf = readFileSync(filePath)
+
+  // Try known patterns in order: original salt format, then ccbf format
+  const patterns = [
+    /friend-\d{4}-\d+/,  // original: friend-2026-401
+    /ccbf-\d{10}/,        // our format: ccbf-0000000088
+  ]
+
+  for (const pattern of patterns) {
+    // Search in the binary as a string (only ASCII portions matter)
+    const str = buf.toString('ascii')
+    const match = str.match(pattern)
+    if (match) {
+      return { salt: match[0], length: match[0].length }
+    }
+  }
+
+  return null
+}
+
+/**
  * Patch the compiled binary in-place.
  *
- * The binary contains the salt in JS string literals and a data segment.
- * New salt MUST be exactly 15 chars (same as original) to avoid corrupting
- * the binary structure. No null-padding — byte-for-byte replacement only.
+ * Automatically detects the current salt in the binary and validates
+ * that the new salt is exactly the same length for safe byte-for-byte
+ * replacement.
  */
 export function applyBinary(
   newSalt: string,
   binaryPath?: string
 ): { oldSalt: string; filePath: string; patchCount: number } {
-  if (newSalt.length !== ORIGINAL_SALT_LEN) {
-    throw new Error(
-      `Salt "${newSalt}" is ${newSalt.length} chars, but binary patching requires exactly ${ORIGINAL_SALT_LEN} chars. ` +
-      `Use "ccbf search --compact" to find compatible salts.`
-    )
-  }
-
   const filePath = binaryPath ?? findClaudeBinary()
   if (!filePath) {
     throw new Error('Could not find claude binary. Use --binary <path> or install Claude Code first.')
@@ -56,10 +78,20 @@ export function applyBinary(
     throw new Error(`Binary not found: ${filePath}`)
   }
 
-  const buf = readFileSync(filePath)
+  const detected = detectBinarySalt(filePath)
+  if (!detected) {
+    throw new Error('Could not detect salt in binary. The binary format may have changed.')
+  }
 
-  // Search pattern: the original salt as bytes
-  const oldBytes = Buffer.from(ORIGINAL_SALT, 'utf-8')
+  if (newSalt.length !== detected.length) {
+    throw new Error(
+      `Salt "${newSalt}" is ${newSalt.length} chars, but the current salt "${detected.salt}" is ${detected.length} chars. ` +
+      `They must be the same length for binary patching.`
+    )
+  }
+
+  const buf = readFileSync(filePath)
+  const oldBytes = Buffer.from(detected.salt, 'utf-8')
   const newBytes = Buffer.from(newSalt, 'utf-8')
 
   const offsets: number[] = []
@@ -72,32 +104,34 @@ export function applyBinary(
   }
 
   if (offsets.length === 0) {
-    throw new Error(
-      `Could not find "${ORIGINAL_SALT}" in binary. It may have been patched already or the binary format changed.`
-    )
+    throw new Error(`Could not find "${detected.salt}" in binary bytes.`)
   }
 
   for (const offset of offsets) {
-    // Exact same length — byte-for-byte replacement, no padding needed
     newBytes.copy(buf, offset)
   }
 
   writeFileSync(filePath, buf)
-  return { oldSalt: ORIGINAL_SALT, filePath, patchCount: offsets.length }
+  return { oldSalt: detected.salt, filePath, patchCount: offsets.length }
 }
 
 /** Restore binary to original salt */
 export function restoreBinary(
   currentSalt: string,
   binaryPath?: string
-): { filePath: string; patchCount: number } {
+): { filePath: string; patchCount: number; restoredSalt: string } {
   const filePath = binaryPath ?? findClaudeBinary()
   if (!filePath) throw new Error('Could not find claude binary.')
   if (!existsSync(filePath)) throw new Error(`Binary not found: ${filePath}`)
 
   const buf = readFileSync(filePath)
   const searchBytes = Buffer.from(currentSalt, 'utf-8')
-  const restoreBytes = Buffer.from(ORIGINAL_SALT, 'utf-8')
+
+  // Restore to FALLBACK_SALT, padded/truncated to match length
+  const targetSalt = FALLBACK_SALT.length === currentSalt.length
+    ? FALLBACK_SALT
+    : FALLBACK_SALT.padEnd(currentSalt.length, '0').slice(0, currentSalt.length)
+  const restoreBytes = Buffer.from(targetSalt, 'utf-8')
 
   const offsets: number[] = []
   let pos = 0
@@ -117,7 +151,7 @@ export function restoreBinary(
   }
 
   writeFileSync(filePath, buf)
-  return { filePath, patchCount: offsets.length }
+  return { filePath, patchCount: offsets.length, restoredSalt: targetSalt }
 }
 
 // ── Source (from git clone) ──

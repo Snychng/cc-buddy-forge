@@ -30,16 +30,19 @@ export type SearchOptions = {
   total?: number // default 1_000_000
   onProgress?: (progress: SearchProgress) => void
   batchSize?: number // how many to process before yielding, default 10000
+  /** Target salt length — auto-detected from binary, defaults to 15 */
+  saltLen?: number
 }
 
 /**
- * Generate a salt string from index.
- * Always generates exactly 15-char salts: "ccbf-" + 10-digit zero-padded number
- * This matches the original salt length (friend-2026-401 = 15 chars) so binary
- * patching can do byte-for-byte replacement safely.
+ * Generate a salt string of exactly `len` characters.
+ * Format: "ccbf-" (5 chars) + zero-padded number (len - 5 chars)
+ * This ensures byte-for-byte binary replacement safety.
  */
-function makeSalt(i: number): string {
-  return `ccbf-${i.toString().padStart(10, '0')}`
+function makeSalt(i: number, len: number): string {
+  const prefix = 'ccbf-'
+  const numLen = len - prefix.length
+  return `${prefix}${i.toString().padStart(numLen, '0')}`
 }
 
 export function search(opts: SearchOptions): SearchResult[] {
@@ -49,6 +52,7 @@ export function search(opts: SearchOptions): SearchResult[] {
     total = 1_000_000,
     onProgress,
     batchSize = 10_000,
+    saltLen = 15,
   } = opts
 
   const matches: SearchResult[] = []
@@ -56,7 +60,7 @@ export function search(opts: SearchOptions): SearchResult[] {
   let lastCount = 0
 
   for (let i = 0; i < total; i++) {
-    const salt = makeSalt(i)
+    const salt = makeSalt(i, saltLen)
     const roll = rollWithSalt(userId, salt)
     const result: SearchResult = { salt, roll }
 
@@ -91,13 +95,14 @@ export async function searchAsync(opts: SearchOptions): Promise<SearchResult[]> 
     total = 1_000_000,
     onProgress,
     batchSize = 10_000,
+    saltLen = 15,
   } = opts
 
   const matches: SearchResult[] = []
   let startTime = performance.now()
 
   for (let i = 0; i < total; i++) {
-    const salt = makeSalt(i)
+    const salt = makeSalt(i, saltLen)
     const roll = rollWithSalt(userId, salt)
     const result: SearchResult = { salt, roll }
 

@@ -8,7 +8,7 @@ import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/t
 import { SearchView } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
 import { ApplyView } from './tui/ApplyView.js'
-import { applyBinary, restoreBinary, findClaudeBinary, ORIGINAL_SALT } from './core/apply.js'
+import { applyBinary, restoreBinary, findClaudeBinary, detectBinarySalt, FALLBACK_SALT } from './core/apply.js'
 import { rollWithSalt } from './core/roller.js'
 
 /** Restore cursor visibility on exit — ink hides it and may not restore it */
@@ -66,7 +66,10 @@ program
     }
 
     const total = parseInt(opts.total, 10)
+    const detected = detectBinarySalt()
+    const saltLen = detected?.length ?? FALLBACK_SALT.length
     console.log(`🔑 userId: ${userId}`)
+    console.log(`🧂 Current salt: "${detected?.salt ?? FALLBACK_SALT}" (${saltLen} chars)`)
     console.log(`🎯 Filter: ${JSON.stringify(filter)}`)
     console.log(`📊 Searching ${total.toLocaleString()} salt values...\n`)
 
@@ -75,6 +78,7 @@ program
         userId={userId}
         filter={filter}
         total={total}
+        saltLen={saltLen}
         onDone={(results) => {
           instance.unmount()
           if (results.length === 0) {
@@ -122,15 +126,22 @@ program
 program
   .command('patch')
   .description('Patch the installed Claude Code binary directly (no rebuild needed)')
-  .requiredOption('--salt <salt>', 'Salt value to apply (max 15 chars)')
+  .requiredOption('--salt <salt>', 'Salt value to apply')
   .option('--binary <path>', 'Path to claude binary (auto-detected)')
   .option('--user-id <id>', 'Override userId')
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
+    const detected = detectBinarySalt(opts.binary)
 
-    if (opts.salt.length !== 15) {
-      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars. Binary patching requires exactly 15 chars.`)
-      console.error(`   Use "ccbf search" to find compatible salts.`)
+    if (!detected) {
+      console.error('❌ Could not detect salt in Claude Code binary.')
+      console.error('   Is Claude Code installed? Try: curl -fsSL https://claude.ai/install.sh | bash')
+      process.exit(1)
+    }
+
+    if (opts.salt.length !== detected.length) {
+      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars, but current salt "${detected.salt}" is ${detected.length} chars.`)
+      console.error(`   Use "ccbf search" to find compatible salts (auto-generates ${detected.length}-char salts).`)
       process.exit(1)
     }
 
@@ -160,7 +171,7 @@ program
     try {
       const result = restoreBinary(opts.salt, opts.binary)
       console.log(`✅ Restored ${result.patchCount} occurrence(s) in ${result.filePath}`)
-      console.log(`   Restored to original: ${ORIGINAL_SALT}`)
+      console.log(`   Restored to: ${result.restoredSalt}`)
     } catch (err) {
       console.error(`❌ ${err instanceof Error ? err.message : err}`)
       process.exit(1)
