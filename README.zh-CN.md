@@ -4,7 +4,7 @@
 
 通过暴力搜索 salt 值，锻造你理想中的 Claude Code 宠物伴侣。
 
-Claude Code 的 buddy 系统通过 `hash(userId + SALT)` 确定性地生成宠物属性。本工具可以搜索数百万个 salt 值，找到能产生你梦想宠物的组合，然后一键应用到本地 Claude Code 源码中。
+Claude Code 的 buddy 系统通过 `hash(userId + SALT)` 确定性地生成宠物属性。本工具可以搜索数百万个 salt 值，找到能产生你梦想宠物的组合，然后一键应用到本地 Claude Code 二进制文件或源码中。
 
 ## 快速开始
 
@@ -26,21 +26,9 @@ ccbf --help
 
 ## 命令
 
-### `ccbf preview` — 预览宠物
-
-查看当前宠物，或预览使用其他 salt 后的效果。
-
-```bash
-# 查看当前宠物
-ccbf preview
-
-# 预览指定 salt 的宠物
-ccbf preview --salt "friend-2026-401-6647"
-```
-
 ### `ccbf search` — 搜索理想宠物
 
-搜索符合目标属性的 salt 值。
+搜索符合目标属性的 salt 值。Salt 长度会自动从已安装的 Claude Code 二进制文件中检测。
 
 ```bash
 # 搜索传说级龙（默认搜索 100 万次）
@@ -71,28 +59,70 @@ ccbf search --species owl --rarity rare --user-id "your-user-id"
 | `--min-stat` | DEBUGGING, PATIENCE, CHAOS, WISDOM, SNARK（格式：`名称:数值`） |
 | `--total` | 搜索次数（默认：1000000） |
 
-### `ccbf apply` — 应用 salt
+### `ccbf patch` — 直接修补二进制
 
-将找到的 salt 值写入 Claude Code 源码。
+直接修补已安装的 Claude Code 二进制文件，无需源码或重新构建。适用于通过 `install.sh` 安装的用户。
+
+```bash
+# 使用搜索结果中的 salt 进行修补
+ccbf patch --salt "ccbf-0000000088"
+
+# 指定自定义二进制路径
+ccbf patch --salt "ccbf-0000000088" --binary /path/to/claude
+```
+
+### `ccbf restore` — 恢复原始 salt
+
+恢复 Claude Code 二进制文件中的原始 salt。
+
+```bash
+# 从已修补的 salt 恢复
+ccbf restore --salt "ccbf-0000000088"
+```
+
+### `ccbf preview` — 预览宠物
+
+查看当前宠物，或预览使用其他 salt 后的效果。
+
+```bash
+# 查看当前宠物
+ccbf preview
+
+# 预览指定 salt 的宠物
+ccbf preview --salt "ccbf-0000000088"
+```
+
+### `ccbf apply` — 应用到源码
+
+将 salt 应用到 Claude Code 源码（适用于从源码构建的用户）。
 
 ```bash
 # 应用 salt（会要求确认）
-ccbf apply --salt "friend-2026-401-6647"
+ccbf apply --salt "ccbf-0000000088"
 
 # 应用并自动重新构建
-ccbf apply --salt "friend-2026-401-6647" --rebuild
+ccbf apply --salt "ccbf-0000000088" --rebuild
 
 # 指定自定义源码路径
-ccbf apply --salt "friend-2026-401-6647" --source ~/my-claude-code
+ccbf apply --salt "ccbf-0000000088" --source ~/my-claude-code
 ```
 
 ## 工作原理
 
 1. Claude Code 通过 `mulberry32(hash(userId + SALT))` 生成宠物属性
-2. SALT 硬编码在 `src/buddy/companion.ts` 中，值为 `'friend-2026-401'`
-3. 本工具尝试 `friend-2026-401-0`、`friend-2026-401-1`、... 等 salt 变体
+2. SALT 硬编码在 Claude Code 二进制文件/源码中
+3. `ccbf search` 自动检测当前 salt 长度，生成完全等长的候选 salt
 4. 每个不同的 salt 会产生完全不同的宠物 — 物种、稀有度、属性值全部重新生成
-5. 找到满意的后，`apply` 命令替换源码中的 SALT 常量
+5. `ccbf patch` 在二进制中进行安全的逐字节替换（等长 = 不破坏结构）
+
+## 二进制修补
+
+适用于通过 `curl -fsSL https://claude.ai/install.sh | bash` 安装的用户：
+
+- `ccbf search` 自动从已安装的二进制文件中检测 salt 并生成匹配长度的 salt
+- `ccbf patch` 原地替换 salt — 无需源码、无需重新构建、无需重新编译
+- `ccbf restore` 随时恢复原始 salt
+- 安全的逐字节替换：新 salt 始终与原始 salt 完全等长
 
 ## 性能
 
@@ -117,7 +147,7 @@ src/
     roller.ts        # PRNG（mulberry32）+ 哈希 + roll 逻辑
     search.ts        # 暴力搜索引擎
     sprites.ts       # 18 种物种的 ASCII 艺术图
-    apply.ts         # Salt 替换 + 重新构建
+    apply.ts         # Salt 替换（二进制修补 + 源码）
   tui/
     PetCard.tsx      # 宠物预览卡片（精灵图 + 属性）
     SearchView.tsx   # 搜索进度 + 结果展示
@@ -145,5 +175,6 @@ bun run tsc --noEmit
 
 - 需要 Bun（不支持 Node）— 哈希函数使用 `Bun.hash` 以确保与 Claude Code 完全一致
 - userId 自动从 `~/.claude.json` 或 `~/.claude/.config.json` 读取
-- 仅修改本地源码，不影响其他用户
-- `apply` 命令修改 Claude Code 源码目录中的 `src/buddy/companion.ts`（默认路径：`~/Developer/claude-code-source-code`）
+- 仅修改本地安装，不影响其他用户
+- `patch` 命令修改 `~/.local/share/claude/versions/` 下的 Claude Code 二进制文件
+- `apply` 命令修改 Claude Code 源码目录中的 `src/buddy/companion.ts`
