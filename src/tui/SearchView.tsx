@@ -169,12 +169,12 @@ export function SearchView({ userId, filter, total, saltLen, onComplete }: Props
                   const pageIndex = row * 2 + col
                   const result = pageResults[pageIndex]
                   if (!result) {
-                    return <Box key={col} flexGrow={1} />
+                    return null
                   }
 
                   const absoluteIndex = pageStart + pageIndex
                   return (
-                    <Box key={result.salt} flexGrow={1}>
+                    <Box key={result.salt}>
                       <PetCard
                         bones={result.roll.bones}
                         salt={result.salt}
