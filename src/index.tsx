@@ -131,8 +131,8 @@ program
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
 
-    if (opts.salt.length > 15) {
-      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars. Binary patching requires <= 15 chars.`)
+    if (opts.salt.length !== 15) {
+      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars. Binary patching requires exactly 15 chars.`)
       console.error(`   Use "ccbf search --compact" to find compatible salts.`)
       process.exit(1)
     }

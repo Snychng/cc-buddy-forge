@@ -33,24 +33,18 @@ export function findClaudeBinary(): string | null {
 /**
  * Patch the compiled binary in-place.
  *
- * The binary contains the salt in JS string literals like: `="friend-2026-401",`
- * and in a data segment as a null-terminated C string.
- *
- * To safely patch without shifting bytes:
- * - New salt MUST be <= original salt length (15 chars)
- * - Shorter salts are null-padded in data segments
- * - In JS segments, we replace the full `"friend-2026-401"` with `"<newSalt>"` + padding
- *
- * For salts longer than 15 chars, this function will throw.
+ * The binary contains the salt in JS string literals and a data segment.
+ * New salt MUST be exactly 15 chars (same as original) to avoid corrupting
+ * the binary structure. No null-padding — byte-for-byte replacement only.
  */
 export function applyBinary(
   newSalt: string,
   binaryPath?: string
 ): { oldSalt: string; filePath: string; patchCount: number } {
-  if (newSalt.length > ORIGINAL_SALT_LEN) {
+  if (newSalt.length !== ORIGINAL_SALT_LEN) {
     throw new Error(
-      `Salt "${newSalt}" is ${newSalt.length} chars, but binary patching requires <= ${ORIGINAL_SALT_LEN} chars. ` +
-      `Use a shorter salt or apply to source instead.`
+      `Salt "${newSalt}" is ${newSalt.length} chars, but binary patching requires exactly ${ORIGINAL_SALT_LEN} chars. ` +
+      `Use "ccbf search --compact" to find compatible salts.`
     )
   }
 
@@ -84,19 +78,15 @@ export function applyBinary(
   }
 
   for (const offset of offsets) {
-    // Write new salt bytes
+    // Exact same length — byte-for-byte replacement, no padding needed
     newBytes.copy(buf, offset)
-    // Null-pad remaining bytes
-    for (let i = newSalt.length; i < ORIGINAL_SALT_LEN; i++) {
-      buf[offset + i] = 0
-    }
   }
 
   writeFileSync(filePath, buf)
   return { oldSalt: ORIGINAL_SALT, filePath, patchCount: offsets.length }
 }
 
-/** Restore binary to original salt from a patched (possibly null-padded) state */
+/** Restore binary to original salt */
 export function restoreBinary(
   currentSalt: string,
   binaryPath?: string
@@ -106,12 +96,7 @@ export function restoreBinary(
   if (!existsSync(filePath)) throw new Error(`Binary not found: ${filePath}`)
 
   const buf = readFileSync(filePath)
-
-  // Build search pattern: currentSalt + null padding to original length
-  const searchLen = ORIGINAL_SALT_LEN
-  const searchBytes = Buffer.alloc(searchLen, 0)
-  Buffer.from(currentSalt, 'utf-8').copy(searchBytes)
-
+  const searchBytes = Buffer.from(currentSalt, 'utf-8')
   const restoreBytes = Buffer.from(ORIGINAL_SALT, 'utf-8')
 
   const offsets: number[] = []
@@ -124,7 +109,7 @@ export function restoreBinary(
   }
 
   if (offsets.length === 0) {
-    throw new Error(`Could not find "${currentSalt}" (null-padded) in binary.`)
+    throw new Error(`Could not find "${currentSalt}" in binary.`)
   }
 
   for (const offset of offsets) {

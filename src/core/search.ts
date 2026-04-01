@@ -37,13 +37,14 @@ export type SearchOptions = {
 
 /**
  * Generate a salt string from index.
- * If maxSaltLen is set, uses compact format: "f26-{i}" (max 15 chars = 999_999_999 values)
+ * If maxSaltLen is set, generates exactly 15-char salts: "ccbf-" + zero-padded number
+ * This ensures binary patching replaces bytes 1:1 with no null padding needed.
  * Otherwise uses original format: "{prefix}-{i}"
  */
 function makeSalt(i: number, prefix: string, maxSaltLen?: number): string {
   if (maxSaltLen) {
-    // Compact format: "f26-{i}" — 4 char prefix + up to 11 digits = 15 chars max
-    return `f26-${i}`
+    // Exactly 15 chars: "ccbf-" (5) + 10-digit zero-padded number = 15
+    return `ccbf-${i.toString().padStart(10, '0')}`
   }
   return `${prefix}-${i}`
 }
