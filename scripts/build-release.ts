@@ -13,6 +13,7 @@ type ReleaseManifest = {
   assets: Array<{
     id: string
     bunTarget: string
+    binaryName: string
     file: string
     sha256: string
   }>
@@ -58,7 +59,7 @@ ensureDir(stagingDir)
 
 for (const target of releaseTargets) {
   const targetStageDir = join(stagingDir, target.id)
-  const binaryPath = join(targetStageDir, 'ccbf')
+  const binaryPath = join(targetStageDir, target.binaryName)
   const archiveName = `ccbf-${version}-${target.id}.tar.gz`
   const archivePath = join(releaseDir, archiveName)
 
@@ -75,13 +76,16 @@ for (const target of releaseTargets) {
     'src/index.tsx',
   ])
 
-  chmodSync(binaryPath, 0o755)
+  if (target.platform !== 'win32') {
+    chmodSync(binaryPath, 0o755)
+  }
 
-  run('tar', ['-czf', archivePath, '-C', targetStageDir, 'ccbf'])
+  run('tar', ['-czf', archivePath, '-C', targetStageDir, target.binaryName])
 
   manifest.assets.push({
     id: target.id,
     bunTarget: target.bunTarget,
+    binaryName: target.binaryName,
     file: basename(archivePath),
     sha256: sha256For(archivePath),
   })

@@ -28,6 +28,7 @@ sudo npm install -g cc-buddy-forge
 
 This installs a small Node launcher, then downloads the matching precompiled `ccbf` binary from GitHub Releases during `postinstall`.
 Requires Node 18+ for the npm-installed launcher.
+Current npm precompiled targets: macOS arm64/x64, Linux x64, and Windows x64.
 You can also download the matching archive for your platform from GitHub Releases, extract it, and put `ccbf` on your `PATH`.
 
 ## Local Setup
@@ -192,7 +193,7 @@ bun run tsc --noEmit
 
 1. Update `package.json` version.
 2. Push a tag like `v1.2.3`.
-3. GitHub Actions builds macOS arm64/x64 and Linux x64 binaries, creates a GitHub Release, and uploads checksums plus `manifest.json`.
+3. GitHub Actions builds macOS arm64/x64, Linux x64, and Windows x64 binaries, creates a GitHub Release, and uploads checksums plus `manifest.json`.
 4. If the repository has an `NPM_TOKEN` secret configured, the same workflow publishes `cc-buddy-forge` to npm after the Release assets are online.
 
 ## Notes
@@ -201,6 +202,6 @@ bun run tsc --noEmit
 - userId is auto-detected from `~/.claude.json` or `~/.claude/.config.json`
 - Original binary salts are stored in `~/.ccbf.json`
 - Only modifies your local installation — does not affect other users
-- The `patch` command modifies the Claude Code binary at `~/.local/share/claude/versions/`
-- npm installation currently supports the same precompiled targets as GitHub Releases: macOS arm64/x64 and Linux x64
+- The `patch` command modifies the auto-detected local Claude Code binary; on macOS / Linux it is typically under `~/.local/share/claude/versions/`
+- npm installation currently supports the same precompiled targets as GitHub Releases: macOS arm64/x64, Linux x64, and Windows x64
 - To publish to npm from GitHub Actions, add `NPM_TOKEN` in repository secrets

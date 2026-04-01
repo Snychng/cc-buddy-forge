@@ -28,12 +28,55 @@ function resignBinaryIfNeeded(filePath: string): void {
   }
 }
 
+function detectSaltFromBytes(buf: Buffer): { salt: string; length: number } | null {
+  const patterns = [
+    /friend-\d{4}-\d+/,
+    /ccbf-\d{10}/,
+  ]
+
+  const str = buf.toString('ascii')
+  for (const pattern of patterns) {
+    const match = str.match(pattern)
+    if (match) {
+      return { salt: match[0], length: match[0].length }
+    }
+  }
+
+  return null
+}
+
+function detectSaltFromFile(filePath: string): { salt: string; length: number } | null {
+  if (!existsSync(filePath)) return null
+  return detectSaltFromBytes(readFileSync(filePath))
+}
+
 /** Resolve the claude binary path (follows symlinks) */
 export function findClaudeBinary(): string | null {
   try {
-    const out = execSync('which claude', { encoding: 'utf-8' }).trim()
+    const command = process.platform === 'win32' ? 'where claude' : 'which claude'
+    const out = execSync(command, { encoding: 'utf-8' }).trim()
     if (!out) return null
-    return realpathSync(out)
+
+    const candidates = out
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        try {
+          return realpathSync(line)
+        } catch {
+          return existsSync(line) ? line : null
+        }
+      })
+      .filter((line): line is string => Boolean(line))
+
+    for (const candidate of candidates) {
+      if (detectSaltFromFile(candidate)) {
+        return candidate
+      }
+    }
+
+    return candidates[0] ?? null
   } catch {
     return null
   }
@@ -59,24 +102,7 @@ export function detectBinarySalt(binaryPath?: string): { salt: string; length: n
   const filePath = resolveBinaryPath(binaryPath)
   if (!filePath || !existsSync(filePath)) return null
 
-  const buf = readFileSync(filePath)
-
-  // Try known patterns in order: original salt format, then ccbf format
-  const patterns = [
-    /friend-\d{4}-\d+/,  // original: friend-2026-401
-    /ccbf-\d{10}/,        // our format: ccbf-0000000088
-  ]
-
-  for (const pattern of patterns) {
-    // Search in the binary as a string (only ASCII portions matter)
-    const str = buf.toString('ascii')
-    const match = str.match(pattern)
-    if (match) {
-      return { salt: match[0], length: match[0].length }
-    }
-  }
-
-  return null
+  return detectSaltFromFile(filePath)
 }
 
 /**

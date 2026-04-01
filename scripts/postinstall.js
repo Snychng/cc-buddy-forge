@@ -130,12 +130,14 @@ async function main() {
 
   execFileSync('tar', ['-xzf', archivePath, '-C', targetDir], { stdio: 'inherit' })
 
-  const binaryPath = join(targetDir, 'ccbf')
+  const binaryPath = join(targetDir, target.binaryName)
   if (!existsSync(binaryPath)) {
     throw new Error(`Extracted archive for ${target.id} but binary was not found`)
   }
 
-  chmodSync(binaryPath, 0o755)
+  if (process.platform !== 'win32') {
+    chmodSync(binaryPath, 0o755)
+  }
   console.log(`Installed ccbf binary for ${target.id}`)
 }
 

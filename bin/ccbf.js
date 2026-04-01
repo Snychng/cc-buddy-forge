@@ -15,7 +15,7 @@ if (!target) {
   process.exit(1)
 }
 
-const binaryPath = join(packageRoot, 'vendor', target.id, 'ccbf')
+const binaryPath = join(packageRoot, 'vendor', target.id, target.binaryName)
 
 if (!existsSync(binaryPath)) {
   console.error('ccbf binary is missing.')

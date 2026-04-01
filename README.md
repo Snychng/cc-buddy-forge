@@ -28,6 +28,7 @@ sudo npm install -g cc-buddy-forge
 
 这种方式会先安装一个很小的 Node 启动器，然后在 `postinstall` 阶段自动从 GitHub Releases 下载对应平台的预编译 `ccbf` 二进制。
 该安装方式要求本机 Node 版本不低于 18。
+当前 npm 预编译安装支持：macOS arm64/x64、Linux x64、Windows x64。
 你也可以从 GitHub Releases 下载对应平台的压缩包，解压后将 `ccbf` 放到你的 `PATH` 中。
 
 ## 本地开发安装
@@ -192,7 +193,7 @@ bun run tsc --noEmit
 
 1. 更新 `package.json` 中的版本号。
 2. 推送类似 `v1.2.3` 的 tag。
-3. GitHub Actions 会构建 macOS arm64/x64 与 Linux x64 二进制，创建 GitHub Release，并上传 checksum 与 `manifest.json`。
+3. GitHub Actions 会构建 macOS arm64/x64、Linux x64 与 Windows x64 二进制，创建 GitHub Release，并上传 checksum 与 `manifest.json`。
 4. 如果仓库配置了 `NPM_TOKEN` secret，同一个工作流还会在 Release 产物上线后自动发布 `cc-buddy-forge` 到 npm。
 
 ## 注意事项
@@ -201,6 +202,6 @@ bun run tsc --noEmit
 - userId 自动从 `~/.claude.json` 或 `~/.claude/.config.json` 读取
 - 原始二进制 salt 会保存在 `~/.ccbf.json`
 - 仅修改本地安装，不影响其他用户
-- `patch` 命令修改 `~/.local/share/claude/versions/` 下的 Claude Code 二进制文件
-- npm 安装当前支持的平台与 GitHub Releases 保持一致：macOS arm64/x64、Linux x64
+- `patch` 命令会修改自动检测到的本地 Claude Code 二进制；在 macOS / Linux 上通常位于 `~/.local/share/claude/versions/`
+- npm 安装当前支持的平台与 GitHub Releases 保持一致：macOS arm64/x64、Linux x64、Windows x64
 - 如果要通过 GitHub Actions 自动发布 npm，需要在仓库 secrets 中配置 `NPM_TOKEN`
