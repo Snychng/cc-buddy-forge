@@ -59,6 +59,42 @@ jobs:
         run: |
           bun run build:release
 
+      - name: Generate release notes
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          PREVIOUS_TAG="$(git tag --sort=-version:refname | grep '^v' | grep -vx "${RELEASE_TAG}" | head -n1 || true)"
+          NOTES_FILE="dist/release/release-notes.md"
+
+          {
+            echo "# ${RELEASE_TAG}"
+            echo
+            echo "## 更新内容"
+            echo
+
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              git log --no-merges --pretty=format:'- %s (%h)' "${PREVIOUS_TAG}..HEAD"
+            else
+              git log --no-merges --pretty=format:'- %s (%h)'
+            fi
+
+            echo
+            echo
+            echo "## 发布资产"
+            echo
+            echo "- 预编译二进制压缩包"
+            echo "- checksums.txt"
+            echo "- manifest.json"
+
+            if [ -n "${PREVIOUS_TAG}" ]; then
+              echo
+              echo "## 对比"
+              echo
+              echo "- https://github.com/${GITHUB_REPOSITORY}/compare/${PREVIOUS_TAG}...${RELEASE_TAG}"
+            fi
+          } > "${NOTES_FILE}"
+
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -66,6 +102,10 @@ jobs:
           RELEASE_TAG="${{ steps.meta.outputs.release_tag }}"
 
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            gh release edit "${RELEASE_TAG}" \
+              --title "${RELEASE_TAG}" \
+              --notes-file dist/release/release-notes.md
+
             gh release upload "${RELEASE_TAG}" \
               dist/release/*.tar.gz \
               dist/release/checksums.txt \
@@ -77,7 +117,7 @@ jobs:
               dist/release/checksums.txt \
               dist/release/manifest.json \
               --title "${RELEASE_TAG}" \
-              --generate-notes
+              --notes-file dist/release/release-notes.md
           fi
 
       - name: Setup Node for npm publish
