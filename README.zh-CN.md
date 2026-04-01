@@ -6,7 +6,7 @@
 
 <p align="center"><strong>一锤一锤，把理想中的 Claude Code 宠物锻造出来。</strong></p>
 
-[English](./README.md) | 中文
+<p align="center">中文 | <a href="./README.en.md">English</a></p>
 
 通过暴力搜索 salt 值，锻造你理想中的 Claude Code 宠物伴侣。
 
