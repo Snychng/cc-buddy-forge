@@ -30,6 +30,7 @@ sudo npm install -g cc-buddy-forge
 该安装方式要求本机 Node 版本不低于 18。
 当前 npm 预编译安装支持：macOS arm64/x64、Linux x64、Windows x64。
 你也可以从 GitHub Releases 下载对应平台的压缩包，解压后将 `ccbf` 放到你的 `PATH` 中。
+如果在 Windows 上自动检测不到 Claude Code 二进制，可以显式传入 `--binary C:\\path\\to\\claude.exe`。
 
 ## 本地开发安装
 
@@ -204,4 +205,5 @@ bun run tsc --noEmit
 - 仅修改本地安装，不影响其他用户
 - `patch` 命令会修改自动检测到的本地 Claude Code 二进制；在 macOS / Linux 上通常位于 `~/.local/share/claude/versions/`
 - npm 安装当前支持的平台与 GitHub Releases 保持一致：macOS arm64/x64、Linux x64、Windows x64
+- 如果 Windows 上 PATH 命中了 `claude.cmd` 之类的包装器，仍可通过 `--binary C:\\path\\to\\claude.exe` 指向真实二进制
 - 如果要通过 GitHub Actions 自动发布 npm，需要在仓库 secrets 中配置 `NPM_TOKEN`

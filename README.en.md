@@ -30,6 +30,7 @@ This installs a small Node launcher, then downloads the matching precompiled `cc
 Requires Node 18+ for the npm-installed launcher.
 Current npm precompiled targets: macOS arm64/x64, Linux x64, and Windows x64.
 You can also download the matching archive for your platform from GitHub Releases, extract it, and put `ccbf` on your `PATH`.
+If auto-detection misses the real Claude Code binary on Windows, pass `--binary C:\\path\\to\\claude.exe` explicitly.
 
 ## Local Setup
 
@@ -204,4 +205,5 @@ bun run tsc --noEmit
 - Only modifies your local installation — does not affect other users
 - The `patch` command modifies the auto-detected local Claude Code binary; on macOS / Linux it is typically under `~/.local/share/claude/versions/`
 - npm installation currently supports the same precompiled targets as GitHub Releases: macOS arm64/x64, Linux x64, and Windows x64
+- If PATH resolves to a Windows wrapper such as `claude.cmd`, you can still point to the real binary with `--binary C:\\path\\to\\claude.exe`
 - To publish to npm from GitHub Actions, add `NPM_TOKEN` in repository secrets

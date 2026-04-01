@@ -1,7 +1,9 @@
 // Replace SALT in the installed Claude Code binary
 
-import { readFileSync, writeFileSync, existsSync, realpathSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, realpathSync, readdirSync, statSync } from 'fs'
 import { execSync, execFileSync } from 'child_process'
+import { basename, dirname, join, resolve } from 'path'
+import { homedir } from 'os'
 
 /** Known default salt — used as fallback when binary detection fails */
 export const FALLBACK_SALT = 'friend-2026-401'
@@ -50,47 +52,140 @@ function detectSaltFromFile(filePath: string): { salt: string; length: number } 
   return detectSaltFromBytes(readFileSync(filePath))
 }
 
-/** Resolve the claude binary path (follows symlinks) */
-export function findClaudeBinary(): string | null {
+function normalizeExistingPath(filePath: string): string | null {
   try {
-    const command = process.platform === 'win32' ? 'where claude' : 'which claude'
-    const out = execSync(command, { encoding: 'utf-8' }).trim()
-    if (!out) return null
+    return realpathSync(filePath)
+  } catch {
+    return existsSync(filePath) ? resolve(filePath) : null
+  }
+}
 
-    const candidates = out
+function collectCommandCandidates(command: string): string[] {
+  try {
+    const out = execSync(command, { encoding: 'utf-8' }).trim()
+    if (!out) return []
+
+    return out
       .split(/\r?\n/)
       .map(line => line.trim())
       .filter(Boolean)
-      .map(line => {
-        try {
-          return realpathSync(line)
-        } catch {
-          return existsSync(line) ? line : null
-        }
-      })
+      .map(normalizeExistingPath)
       .filter((line): line is string => Boolean(line))
+  } catch {
+    return []
+  }
+}
 
-    for (const candidate of candidates) {
-      if (detectSaltFromFile(candidate)) {
-        return candidate
-      }
+function scanClaudeBinaries(rootDir: string, depth = 2): string[] {
+  const root = normalizeExistingPath(rootDir)
+  if (!root) return []
+
+  let stats
+  try {
+    stats = statSync(root)
+  } catch {
+    return []
+  }
+
+  if (stats.isFile()) {
+    const name = basename(root).toLowerCase()
+    return name === 'claude' || name === 'claude.exe' ? [root] : []
+  }
+
+  if (!stats.isDirectory() || depth < 0) return []
+
+  const results: string[] = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = join(root, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...scanClaudeBinaries(entryPath, depth - 1))
+      continue
     }
 
-    return candidates[0] ?? null
-  } catch {
-    return null
+    const name = entry.name.toLowerCase()
+    if (name === 'claude' || name === 'claude.exe') {
+      const normalized = normalizeExistingPath(entryPath)
+      if (normalized) results.push(normalized)
+    }
   }
+
+  return results
+}
+
+function uniquePaths(paths: Array<string | null | undefined>): string[] {
+  const seen = new Set<string>()
+  const results: string[] = []
+
+  for (const path of paths) {
+    if (!path || seen.has(path)) continue
+    seen.add(path)
+    results.push(path)
+  }
+
+  return results
+}
+
+function getClaudeCandidatePaths(seedPath?: string): string[] {
+  const home = homedir()
+  const explicit = seedPath ? [normalizeExistingPath(seedPath)] : []
+  const commandCandidates = seedPath
+    ? []
+    : process.platform === 'win32'
+      ? uniquePaths([
+          ...collectCommandCandidates('where claude'),
+          ...collectCommandCandidates('where claude.exe'),
+        ])
+      : collectCommandCandidates('which claude')
+
+  const nearbyCandidates = uniquePaths([
+    ...explicit,
+    ...explicit.flatMap(path => path ? [
+      normalizeExistingPath(join(dirname(path), 'claude')),
+      normalizeExistingPath(join(dirname(path), 'claude.exe')),
+      normalizeExistingPath(join(dirname(path), '.local', 'share', 'claude', 'versions')),
+    ] : []),
+  ])
+
+  const commonInstallCandidates = uniquePaths([
+    normalizeExistingPath(join(home, '.local', 'bin', 'claude')),
+    normalizeExistingPath(join(home, '.local', 'bin', 'claude.exe')),
+    normalizeExistingPath(join(home, '.claude', 'local', 'claude')),
+    normalizeExistingPath(join(home, '.claude', 'local', 'claude.exe')),
+  ])
+
+  const scannedInstallCandidates = uniquePaths([
+    ...scanClaudeBinaries(join(home, '.local', 'share', 'claude', 'versions')),
+    ...scanClaudeBinaries(join(home, '.claude', 'local')),
+    ...nearbyCandidates.flatMap(path => scanClaudeBinaries(path)),
+  ])
+
+  return uniquePaths([
+    ...explicit,
+    ...commandCandidates,
+    ...nearbyCandidates,
+    ...commonInstallCandidates,
+    ...scannedInstallCandidates,
+  ])
+}
+
+/** Resolve the claude binary path (follows symlinks) */
+export function findClaudeBinary(): string | null {
+  const candidates = getClaudeCandidatePaths()
+  for (const candidate of candidates) {
+    if (detectSaltFromFile(candidate)) return candidate
+  }
+
+  return candidates[0] ?? null
 }
 
 /** Resolve a provided binary path to a stable real path */
 export function resolveBinaryPath(binaryPath?: string): string | null {
-  if (!binaryPath) return findClaudeBinary()
-
-  try {
-    return realpathSync(binaryPath)
-  } catch {
-    return existsSync(binaryPath) ? binaryPath : null
+  const candidates = getClaudeCandidatePaths(binaryPath)
+  for (const candidate of candidates) {
+    if (detectSaltFromFile(candidate)) return candidate
   }
+
+  return candidates[0] ?? null
 }
 
 /**

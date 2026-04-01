@@ -34,7 +34,9 @@ function applySaltSelection({
 
   if (!filePath || !detected) {
     console.error('❌ Could not detect salt in Claude Code binary.')
-    console.error('   Is Claude Code installed? Try: curl -fsSL https://claude.ai/install.sh | bash')
+    console.error('   If Claude Code is installed, try passing the real binary path explicitly:')
+    console.error('   ccbf search --binary /path/to/claude')
+    console.error('   ccbf patch --binary /path/to/claude --salt "ccbf-0000000088"')
     process.exit(1)
   }
 
