@@ -1,5 +1,5 @@
 // Apply view — replace salt and optionally rebuild
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { applySalt, getCurrentSalt, rebuild } from '../core/apply.js'
 import { rollWithSalt } from '../core/roller.js'
@@ -10,11 +10,12 @@ type Props = {
   salt: string
   ccSourcePath?: string
   shouldRebuild?: boolean
+  onExit?: () => void
 }
 
 type State = 'confirm' | 'applying' | 'building' | 'done' | 'error'
 
-export function ApplyView({ userId, salt, ccSourcePath, shouldRebuild }: Props) {
+export function ApplyView({ userId, salt, ccSourcePath, shouldRebuild, onExit }: Props) {
   const [state, setState] = useState<State>('confirm')
   const [error, setError] = useState<string>('')
   const [oldSalt, setOldSalt] = useState<string>('')
@@ -47,9 +48,16 @@ export function ApplyView({ userId, salt, ccSourcePath, shouldRebuild }: Props) 
         setState('error')
       }
     } else if (input === 'n' || input === 'N' || key.escape) {
-      process.exit(0)
+      onExit?.()
     }
   })
+
+  useEffect(() => {
+    if (state === 'done' || state === 'error') {
+      const timer = setTimeout(() => onExit?.(), 500)
+      return () => clearTimeout(timer)
+    }
+  }, [state])
 
   return (
     <Box flexDirection="column">

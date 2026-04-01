@@ -9,6 +9,14 @@ import { SearchView } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
 import { ApplyView } from './tui/ApplyView.js'
 
+/** Restore cursor visibility on exit — ink hides it and may not restore it */
+function restoreCursor() {
+  process.stdout.write('\x1B[?25h')
+}
+process.on('exit', restoreCursor)
+process.on('SIGINT', () => { restoreCursor(); process.exit(130) })
+process.on('SIGTERM', () => { restoreCursor(); process.exit(143) })
+
 const program = new Command()
   .name('ccbf')
   .description('🔨 Forge your ideal Claude Code buddy by finding the perfect salt')
@@ -60,15 +68,17 @@ program
     console.log(`🎯 Filter: ${JSON.stringify(filter)}`)
     console.log(`📊 Searching ${total.toLocaleString()} salt values...\n`)
 
-    render(
+    const instance = render(
       <SearchView
         userId={userId}
         filter={filter}
         total={total}
         onDone={(results) => {
+          instance.unmount()
           if (results.length === 0) {
             console.log('\n😢 No matches found. Try relaxing your filters or increasing --total.')
           }
+          process.exit(0)
         }}
       />
     )
@@ -82,7 +92,9 @@ program
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
     console.log(`🔑 userId: ${userId}\n`)
-    render(<PreviewView userId={userId} salt={opts.salt} />)
+    const instance = render(<PreviewView userId={userId} salt={opts.salt} />)
+    instance.unmount()
+    process.exit(0)
   })
 
 program
@@ -100,6 +112,7 @@ program
         salt={opts.salt}
         ccSourcePath={opts.source}
         shouldRebuild={opts.rebuild}
+        onExit={() => process.exit(0)}
       />
     )
   })
