@@ -1,8 +1,8 @@
 // Replace SALT in the installed Claude Code binary
 
 import { readFileSync, writeFileSync, existsSync, realpathSync, readdirSync, statSync } from 'fs'
-import { execSync, execFileSync } from 'child_process'
-import { basename, dirname, join, resolve } from 'path'
+import { execFileSync } from 'child_process'
+import { basename, dirname, extname, isAbsolute, join, resolve } from 'path'
 import { homedir } from 'os'
 
 /** Known default salt — used as fallback when binary detection fails */
@@ -49,6 +49,11 @@ function detectSaltFromBytes(buf: Buffer): { salt: string; length: number } | nu
 
 function detectSaltFromFile(filePath: string): { salt: string; length: number } | null {
   if (!existsSync(filePath)) return null
+  try {
+    if (!statSync(filePath).isFile()) return null
+  } catch {
+    return null
+  }
   return detectSaltFromBytes(readFileSync(filePath))
 }
 
@@ -60,20 +65,120 @@ function normalizeExistingPath(filePath: string): string | null {
   }
 }
 
-function collectCommandCandidates(command: string): string[] {
-  try {
-    const out = execSync(command, { encoding: 'utf-8' }).trim()
-    if (!out) return []
+function collectPathCommandCandidates(): string[] {
+  const pathEnv = process.env.PATH ?? ''
+  const pathDirs = pathEnv.split(process.platform === 'win32' ? ';' : ':').filter(Boolean)
+  const commandNames = process.platform === 'win32'
+    ? ['claude.exe', 'claude.cmd', 'claude.bat', 'claude.ps1', 'claude']
+    : ['claude']
 
-    return out
-      .split(/\r?\n/)
-      .map(line => line.trim())
-      .filter(Boolean)
-      .map(normalizeExistingPath)
-      .filter((line): line is string => Boolean(line))
+  const candidates: Array<string | null> = []
+  for (const dir of pathDirs) {
+    for (const name of commandNames) {
+      candidates.push(normalizeExistingPath(join(dir, name)))
+    }
+  }
+
+  return uniquePaths(candidates)
+}
+
+function looksLikeClaudeBinaryCandidate(filePath: string): boolean {
+  const name = basename(filePath).toLowerCase()
+  const ext = extname(name)
+  return (
+    name === 'claude' ||
+    name === 'claude.exe' ||
+    name === 'ccode' ||
+    name === 'ccode.exe' ||
+    ext === '.exe' ||
+    ext === '.js' ||
+    ext === '.cjs' ||
+    ext === '.mjs'
+  )
+}
+
+function scanForSaltFiles(rootPath: string, depth = 3): string[] {
+  const root = normalizeExistingPath(rootPath)
+  if (!root) return []
+
+  let stats
+  try {
+    stats = statSync(root)
   } catch {
     return []
   }
+
+  if (stats.isFile()) {
+    if (stats.size > 80 * 1024 * 1024) return []
+    return detectSaltFromFile(root) ? [root] : []
+  }
+
+  if (!stats.isDirectory() || depth < 0) return []
+
+  const results: string[] = []
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = join(root, entry.name)
+
+    if (entry.isDirectory()) {
+      if (depth > 0) {
+        results.push(...scanForSaltFiles(entryPath, depth - 1))
+      }
+      continue
+    }
+
+    if (!looksLikeClaudeBinaryCandidate(entryPath)) continue
+    if (detectSaltFromFile(entryPath)) results.push(entryPath)
+  }
+
+  return uniquePaths(results)
+}
+
+function extractWrapperTargets(wrapperPath: string): string[] {
+  const ext = extname(wrapperPath).toLowerCase()
+  if (!['.cmd', '.bat', '.ps1', '.sh'].includes(ext)) return []
+
+  let content = ''
+  try {
+    content = readFileSync(wrapperPath, 'utf-8')
+  } catch {
+    return []
+  }
+
+  const wrapperDir = dirname(wrapperPath)
+  const targets: Array<string | null> = []
+  const patterns = [
+    /node_modules[\\/][^\r\n"' ]+/g,
+    /claude(?:code)?[\\/][^\r\n"' ]+\.(?:js|cjs|mjs|exe)/gi,
+    /[%$][^"' ]*claude[^"' ]+\.(?:js|cjs|mjs|exe)/gi,
+    /[A-Za-z]:\\[^"' \r\n]+\.(?:js|cjs|mjs|exe)/g,
+  ]
+
+  for (const pattern of patterns) {
+    for (const match of content.match(pattern) ?? []) {
+      let candidate = match.trim().replace(/^['"]|['"]$/g, '')
+      candidate = candidate.replace(/%~dp0/gi, `${wrapperDir}\\`)
+      candidate = candidate.replace(/\$PSScriptRoot/gi, wrapperDir)
+      candidate = candidate.replace(/[\\/]+/g, process.platform === 'win32' ? '\\' : '/')
+
+      const normalized = isAbsolute(candidate)
+        ? normalizeExistingPath(candidate)
+        : normalizeExistingPath(resolve(wrapperDir, candidate))
+
+      targets.push(normalized)
+    }
+  }
+
+  const nearby = [
+    join(wrapperDir, '..', 'node_modules', '@anthropic-ai', 'claude-code'),
+    join(wrapperDir, '..', 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+    join(wrapperDir, '..', 'node_modules', '@anthropic-ai', 'claude-code', 'dist'),
+    join(wrapperDir, '..', 'node_modules', '@anthropic-ai', 'claude-code', 'vendor'),
+  ]
+
+  return uniquePaths([
+    ...targets,
+    ...nearby.map(path => normalizeExistingPath(resolve(path))),
+  ])
 }
 
 function scanClaudeBinaries(rootDir: string, depth = 2): string[] {
@@ -127,22 +232,22 @@ function uniquePaths(paths: Array<string | null | undefined>): string[] {
 
 function getClaudeCandidatePaths(seedPath?: string): string[] {
   const home = homedir()
+  const localAppData = process.env.LOCALAPPDATA
+  const appData = process.env.APPDATA
   const explicit = seedPath ? [normalizeExistingPath(seedPath)] : []
-  const commandCandidates = seedPath
-    ? []
-    : process.platform === 'win32'
-      ? uniquePaths([
-          ...collectCommandCandidates('where claude'),
-          ...collectCommandCandidates('where claude.exe'),
-        ])
-      : collectCommandCandidates('which claude')
+  const commandCandidates = seedPath ? [] : collectPathCommandCandidates()
+  const wrapperDerivedCandidates = uniquePaths(commandCandidates.flatMap(path => extractWrapperTargets(path)))
 
   const nearbyCandidates = uniquePaths([
     ...explicit,
     ...explicit.flatMap(path => path ? [
       normalizeExistingPath(join(dirname(path), 'claude')),
       normalizeExistingPath(join(dirname(path), 'claude.exe')),
+      normalizeExistingPath(join(dirname(path), 'claude.cmd')),
+      normalizeExistingPath(join(dirname(path), 'claude.bat')),
+      normalizeExistingPath(join(dirname(path), 'claude.ps1')),
       normalizeExistingPath(join(dirname(path), '.local', 'share', 'claude', 'versions')),
+      normalizeExistingPath(join(dirname(path), 'node_modules', '@anthropic-ai', 'claude-code')),
     ] : []),
   ])
 
@@ -151,20 +256,38 @@ function getClaudeCandidatePaths(seedPath?: string): string[] {
     normalizeExistingPath(join(home, '.local', 'bin', 'claude.exe')),
     normalizeExistingPath(join(home, '.claude', 'local', 'claude')),
     normalizeExistingPath(join(home, '.claude', 'local', 'claude.exe')),
+    normalizeExistingPath(join(home, '.claude', 'local')),
+    appData ? normalizeExistingPath(join(appData, 'npm', 'claude.cmd')) : null,
+    appData ? normalizeExistingPath(join(appData, 'npm', 'claude.ps1')) : null,
+    appData ? normalizeExistingPath(join(appData, 'npm', 'node_modules', '@anthropic-ai', 'claude-code')) : null,
+    localAppData ? normalizeExistingPath(join(localAppData, 'Programs', 'ClaudeCode')) : null,
+    localAppData ? normalizeExistingPath(join(localAppData, 'Programs', 'ClaudeCode', 'claude.exe')) : null,
   ])
 
-  const scannedInstallCandidates = uniquePaths([
+  const binaryNamedCandidates = uniquePaths([
     ...scanClaudeBinaries(join(home, '.local', 'share', 'claude', 'versions')),
     ...scanClaudeBinaries(join(home, '.claude', 'local')),
     ...nearbyCandidates.flatMap(path => scanClaudeBinaries(path)),
+    ...wrapperDerivedCandidates.flatMap(path => scanClaudeBinaries(path)),
+    ...commonInstallCandidates.flatMap(path => scanClaudeBinaries(path)),
+  ])
+
+  const saltDetectedCandidates = uniquePaths([
+    ...explicit.flatMap(path => path ? scanForSaltFiles(path) : []),
+    ...commandCandidates.flatMap(path => scanForSaltFiles(path)),
+    ...wrapperDerivedCandidates.flatMap(path => scanForSaltFiles(path)),
+    ...nearbyCandidates.flatMap(path => scanForSaltFiles(path)),
+    ...commonInstallCandidates.flatMap(path => scanForSaltFiles(path)),
   ])
 
   return uniquePaths([
     ...explicit,
     ...commandCandidates,
+    ...wrapperDerivedCandidates,
     ...nearbyCandidates,
+    ...saltDetectedCandidates,
     ...commonInstallCandidates,
-    ...scannedInstallCandidates,
+    ...binaryNamedCandidates,
   ])
 }
 
