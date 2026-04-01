@@ -12,14 +12,23 @@ type Props = {
   selected?: boolean
 }
 
-function StatBar({ name, value }: { name: string; value: number }) {
-  const width = 20
+function StatBar({
+  name,
+  value,
+  width = 20,
+  labelWidth = 10,
+}: {
+  name: string
+  value: number
+  width?: number
+  labelWidth?: number
+}) {
   const filled = Math.round((value / 100) * width)
   const bar = '█'.repeat(filled) + '░'.repeat(width - filled)
   const color = value >= 80 ? 'green' : value >= 50 ? 'yellow' : value >= 25 ? 'white' : 'red'
   return (
     <Box>
-      <Text>{name.padEnd(10)}</Text>
+      <Text>{name.padEnd(labelWidth)}</Text>
       <Text color={color}>{bar}</Text>
       <Text> {String(value).padStart(3)}</Text>
     </Box>
@@ -47,13 +56,11 @@ export function PetCard({ bones, salt, compact, selected }: Props) {
         <Box gap={2} marginY={1}>
           <Box flexDirection="column" flexGrow={1}>
             <Text>Eye: <Text bold>{bones.eye}</Text>  Hat: <Text bold>{bones.hat}</Text></Text>
-            <Text>
-              DBG {String(bones.stats.DEBUGGING).padStart(3)}  PAT {String(bones.stats.PATIENCE).padStart(3)}
-            </Text>
-            <Text>
-              CHA {String(bones.stats.CHAOS).padStart(3)}  WIS {String(bones.stats.WISDOM).padStart(3)}
-            </Text>
-            <Text>SNK {String(bones.stats.SNARK).padStart(3)}</Text>
+            <StatBar name="DBG" value={bones.stats.DEBUGGING} width={10} labelWidth={4} />
+            <StatBar name="PAT" value={bones.stats.PATIENCE} width={10} labelWidth={4} />
+            <StatBar name="CHA" value={bones.stats.CHAOS} width={10} labelWidth={4} />
+            <StatBar name="WIS" value={bones.stats.WISDOM} width={10} labelWidth={4} />
+            <StatBar name="SNK" value={bones.stats.SNARK} width={10} labelWidth={4} />
             <Text dimColor>Salt: {salt}</Text>
           </Box>
           <Box flexDirection="column" minWidth={12}>
