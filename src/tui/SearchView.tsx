@@ -1,16 +1,31 @@
 // Search progress and results TUI
 import React, { useState, useEffect } from 'react'
-import { Box, Text } from 'ink'
+import { Box, Text, useInput } from 'ink'
 import { searchAsync, type SearchProgress } from '../core/search.js'
 import type { SearchFilter, SearchResult } from '../core/types.js'
 import { PetCard } from './PetCard.js'
+
+export type SearchViewCompletion =
+  | { action: 'exit'; results: SearchResult[] }
+  | { action: 'apply'; result: SearchResult; results: SearchResult[] }
 
 type Props = {
   userId: string
   filter: SearchFilter
   total: number
   saltLen?: number
-  onDone?: (results: SearchResult[]) => void
+  onComplete?: (result: SearchViewCompletion) => void
+}
+
+function shuffleMatches(items: SearchResult[]): SearchResult[] {
+  const shuffled = [...items]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    const tmp = shuffled[i]
+    shuffled[i] = shuffled[j]
+    shuffled[j] = tmp
+  }
+  return shuffled
 }
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
@@ -25,11 +40,19 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
   )
 }
 
-export function SearchView({ userId, filter, total, saltLen, onDone }: Props) {
+export function SearchView({ userId, filter, total, saltLen, onComplete }: Props) {
   const [progress, setProgress] = useState<SearchProgress>({
     current: 0, total, matches: [], speed: 0,
   })
   const [done, setDone] = useState(false)
+  const [results, setResults] = useState<SearchResult[]>([])
+  const [selectedIndex, setSelectedIndex] = useState(0)
+
+  const pageSize = 4
+  const totalPages = Math.max(1, Math.ceil(results.length / pageSize))
+  const currentPage = Math.floor(selectedIndex / pageSize)
+  const pageStart = currentPage * pageSize
+  const pageResults = results.slice(pageStart, pageStart + pageSize)
 
   useEffect(() => {
     searchAsync({
@@ -40,9 +63,46 @@ export function SearchView({ userId, filter, total, saltLen, onDone }: Props) {
       onProgress: setProgress,
     }).then(results => {
       setDone(true)
-      onDone?.(results)
+      const shuffled = shuffleMatches(results)
+      setResults(shuffled)
+      setSelectedIndex(0)
     })
   }, [])
+
+  useInput((_input, key) => {
+    if (!done) return
+
+    if (key.escape) {
+      onComplete?.({ action: 'exit', results })
+      return
+    }
+
+    if (results.length === 0) return
+
+    if (key.return) {
+      onComplete?.({ action: 'apply', result: results[selectedIndex], results })
+      return
+    }
+
+    if (key.leftArrow) {
+      setSelectedIndex(index => Math.max(0, index - 1))
+      return
+    }
+
+    if (key.rightArrow) {
+      setSelectedIndex(index => Math.min(results.length - 1, index + 1))
+      return
+    }
+
+    if (key.upArrow) {
+      setSelectedIndex(index => Math.max(0, index - 2))
+      return
+    }
+
+    if (key.downArrow) {
+      setSelectedIndex(index => Math.min(results.length - 1, index + 2))
+    }
+  }, { isActive: done })
 
   const filterDesc = Object.entries(filter)
     .filter(([, v]) => v !== undefined)
@@ -74,7 +134,7 @@ export function SearchView({ userId, filter, total, saltLen, onDone }: Props) {
         </Text>
       </Box>
 
-      {progress.matches.length > 0 && (
+      {!done && progress.matches.length > 0 && (
         <Box flexDirection="column" marginTop={1}>
           <Text bold underline>Top Results:</Text>
           {progress.matches.slice(0, 5).map((result, i) => (
@@ -85,6 +145,57 @@ export function SearchView({ userId, filter, total, saltLen, onDone }: Props) {
           {progress.matches.length > 5 && (
             <Text dimColor>... and {progress.matches.length - 5} more</Text>
           )}
+        </Box>
+      )}
+
+      {done && results.length === 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text color="yellow">No matches found for the current filter.</Text>
+          <Text dimColor>Press Esc to exit, or run again with looser filters / higher --total.</Text>
+        </Box>
+      )}
+
+      {done && results.length > 0 && (
+        <Box flexDirection="column" marginTop={1}>
+          <Text bold underline>Randomized Results</Text>
+          <Text dimColor>
+            Search finished. Results were shuffled to avoid the same salts always appearing first.
+          </Text>
+
+          <Box flexDirection="column" marginTop={1} gap={1}>
+            {[0, 1].map(row => (
+              <Box key={row} gap={1}>
+                {[0, 1].map(col => {
+                  const pageIndex = row * 2 + col
+                  const result = pageResults[pageIndex]
+                  if (!result) {
+                    return <Box key={col} flexGrow={1} />
+                  }
+
+                  const absoluteIndex = pageStart + pageIndex
+                  return (
+                    <Box key={result.salt} flexGrow={1}>
+                      <PetCard
+                        bones={result.roll.bones}
+                        salt={result.salt}
+                        compact
+                        selected={absoluteIndex === selectedIndex}
+                      />
+                    </Box>
+                  )
+                })}
+              </Box>
+            ))}
+          </Box>
+
+          <Box marginTop={1}>
+            <Text>
+              Page <Text color="cyan" bold>{currentPage + 1}</Text>/{totalPages}
+              {' · '}
+              Selected <Text color="cyan" bold>{selectedIndex + 1}</Text>/{results.length}
+            </Text>
+          </Box>
+          <Text dimColor>Use arrow keys to move. Press Enter to apply the selected pet. Press Esc to exit.</Text>
         </Box>
       )}
     </Box>

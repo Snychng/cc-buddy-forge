@@ -7,7 +7,7 @@ import { detectUserId } from './utils/config.js'
 import { getRecordedOriginalSalt, recordOriginalSalt } from './utils/state.js'
 import { SPECIES, RARITIES, EYES, HATS, STAT_NAMES } from './core/types.js'
 import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/types.js'
-import { SearchView } from './tui/SearchView.js'
+import { SearchView, type SearchViewCompletion } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
 import { applyBinary, restoreBinary, detectBinarySalt, FALLBACK_SALT, resolveBinaryPath } from './core/apply.js'
 import { rollWithSalt } from './core/roller.js'
@@ -19,6 +19,50 @@ function restoreCursor() {
 process.on('exit', restoreCursor)
 process.on('SIGINT', () => { restoreCursor(); process.exit(130) })
 process.on('SIGTERM', () => { restoreCursor(); process.exit(143) })
+
+function applySaltSelection({
+  salt,
+  binaryPath,
+  userId,
+}: {
+  salt: string
+  binaryPath?: string
+  userId: string
+}) {
+  const filePath = resolveBinaryPath(binaryPath)
+  const detected = detectBinarySalt(filePath ?? undefined)
+
+  if (!filePath || !detected) {
+    console.error('❌ Could not detect salt in Claude Code binary.')
+    console.error('   Is Claude Code installed? Try: curl -fsSL https://claude.ai/install.sh | bash')
+    process.exit(1)
+  }
+
+  if (salt.length !== detected.length) {
+    console.error(`❌ Salt "${salt}" is ${salt.length} chars, but current salt "${detected.salt}" is ${detected.length} chars.`)
+    console.error(`   Use "ccbf search" to find compatible salts (auto-generates ${detected.length}-char salts).`)
+    process.exit(1)
+  }
+
+  const roll = rollWithSalt(userId, salt)
+  console.log(`🔑 userId: ${userId}`)
+  console.log(`🧂 salt: ${salt}`)
+  console.log(`🐾 Result: ${roll.bones.rarity} ${roll.bones.species}${roll.bones.shiny ? ' ✨' : ''}\n`)
+
+  try {
+    const saved = recordOriginalSalt(filePath, detected.salt)
+    const result = applyBinary(salt, filePath)
+    console.log(`✅ Patched ${result.patchCount} occurrence(s) in ${result.filePath}`)
+    console.log(`   Old: ${result.oldSalt} → New: ${salt}`)
+    if (saved) {
+      console.log(`   Saved original salt for one-command restore: ${detected.salt}`)
+    }
+    console.log(`\n   Restart Claude Code to see your new buddy!`)
+  } catch (err) {
+    console.error(`❌ ${err instanceof Error ? err.message : err}`)
+    process.exit(1)
+  }
+}
 
 const program = new Command()
   .name('ccbf')
@@ -50,6 +94,7 @@ program
   .option('--min-stat <stat:value>', 'Minimum stat value (e.g., WISDOM:80)')
   .option('--total <n>', 'Number of salts to try', '1000000')
   .option('--user-id <id>', 'Override userId (auto-detected by default)')
+  .option('--binary <path>', 'Path to claude binary (auto-detected for Enter-to-apply)')
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
 
@@ -81,12 +126,13 @@ program
     }
 
     const total = parseInt(opts.total, 10)
-    const detected = detectBinarySalt()
+    const detected = detectBinarySalt(opts.binary)
     const saltLen = detected?.length ?? FALLBACK_SALT.length
     console.log(`🔑 userId: ${userId}`)
     console.log(`🧂 Current salt: "${detected?.salt ?? FALLBACK_SALT}" (${saltLen} chars)`)
     console.log(`🎯 Filter: ${JSON.stringify(filter)}`)
-    console.log(`📊 Searching ${total.toLocaleString()} salt values...\n`)
+    console.log(`📊 Searching ${total.toLocaleString()} salt values...`)
+    console.log('🎮 After search: arrow keys move, Enter applies, Esc exits.\n')
 
     const instance = render(
       <SearchView
@@ -94,11 +140,27 @@ program
         filter={filter}
         total={total}
         saltLen={saltLen}
-        onDone={(results) => {
+        onComplete={(completion: SearchViewCompletion) => {
           instance.unmount()
-          if (results.length === 0) {
-            console.log('\n😢 No matches found. Try relaxing your filters or increasing --total.')
+          if (completion.action === 'exit') {
+            if (completion.results.length === 0) {
+              console.log('\n😢 No matches found. Try relaxing your filters or increasing --total.')
+            } else {
+              console.log('\n👋 Search closed without applying a pet.')
+            }
+            process.exit(0)
           }
+
+          if (completion.results.length === 0) {
+            console.log('\n😢 No matches found. Try relaxing your filters or increasing --total.')
+            process.exit(0)
+          }
+
+          applySaltSelection({
+            salt: completion.result.salt,
+            binaryPath: opts.binary,
+            userId,
+          })
           process.exit(0)
         }}
       />
@@ -125,41 +187,11 @@ program
   .option('--binary <path>', 'Path to claude binary (auto-detected)')
   .option('--user-id <id>', 'Override userId')
   .action((opts) => {
-    const userId = opts.userId ?? detectUserId()
-    const filePath = resolveBinaryPath(opts.binary)
-    const detected = detectBinarySalt(filePath ?? undefined)
-
-    if (!filePath || !detected) {
-      console.error('❌ Could not detect salt in Claude Code binary.')
-      console.error('   Is Claude Code installed? Try: curl -fsSL https://claude.ai/install.sh | bash')
-      process.exit(1)
-    }
-
-    if (opts.salt.length !== detected.length) {
-      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars, but current salt "${detected.salt}" is ${detected.length} chars.`)
-      console.error(`   Use "ccbf search" to find compatible salts (auto-generates ${detected.length}-char salts).`)
-      process.exit(1)
-    }
-
-    // Preview what the pet will look like
-    const roll = rollWithSalt(userId, opts.salt)
-    console.log(`🔑 userId: ${userId}`)
-    console.log(`🧂 salt: ${opts.salt}`)
-    console.log(`🐾 Result: ${roll.bones.rarity} ${roll.bones.species}${roll.bones.shiny ? ' ✨' : ''}\n`)
-
-    try {
-      const saved = recordOriginalSalt(filePath, detected.salt)
-      const result = applyBinary(opts.salt, filePath)
-      console.log(`✅ Patched ${result.patchCount} occurrence(s) in ${result.filePath}`)
-      console.log(`   Old: ${result.oldSalt} → New: ${opts.salt}`)
-      if (saved) {
-        console.log(`   Saved original salt for one-command restore: ${detected.salt}`)
-      }
-      console.log(`\n   Restart Claude Code to see your new buddy!`)
-    } catch (err) {
-      console.error(`❌ ${err instanceof Error ? err.message : err}`)
-      process.exit(1)
-    }
+    applySaltSelection({
+      salt: opts.salt,
+      binaryPath: opts.binary,
+      userId: opts.userId ?? detectUserId(),
+    })
   })
 
 program

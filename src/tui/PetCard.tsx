@@ -9,6 +9,7 @@ type Props = {
   bones: CompanionBones
   salt: string
   compact?: boolean
+  selected?: boolean
 }
 
 function StatBar({ name, value }: { name: string; value: number }) {
@@ -25,25 +26,44 @@ function StatBar({ name, value }: { name: string; value: number }) {
   )
 }
 
-export function PetCard({ bones, salt, compact }: Props) {
+export function PetCard({ bones, salt, compact, selected }: Props) {
   const sprite = renderSprite(bones)
   const rarityColor = RARITY_COLORS[bones.rarity] as any
   const stars = RARITY_STARS[bones.rarity]
 
   if (compact) {
     return (
-      <Box>
-        <Text color={rarityColor}>{stars} </Text>
-        <Text bold>{bones.species}</Text>
-        <Text> eye={bones.eye} hat={bones.hat}</Text>
-        {bones.shiny && <Text color="yellow"> ✨SHINY</Text>}
-        <Text dimColor> salt={salt}</Text>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor={selected ? 'cyan' : 'gray'}
+        paddingX={1}
+      >
+        <Text color={selected ? 'cyan' : undefined}>{selected ? '▶ Selected' : '  Candidate'}</Text>
+        <Text color={rarityColor} bold>
+          {stars} {bones.rarity.toUpperCase()} {bones.species.toUpperCase()}
+          {bones.shiny ? ' ✨' : ''}
+        </Text>
+        <Text>Eye: <Text bold>{bones.eye}</Text>  Hat: <Text bold>{bones.hat}</Text></Text>
+        <Text>
+          DBG {String(bones.stats.DEBUGGING).padStart(3)}  PAT {String(bones.stats.PATIENCE).padStart(3)}
+        </Text>
+        <Text>
+          CHA {String(bones.stats.CHAOS).padStart(3)}  WIS {String(bones.stats.WISDOM).padStart(3)}
+        </Text>
+        <Text>SNK {String(bones.stats.SNARK).padStart(3)}</Text>
+        <Text dimColor>Salt: {salt}</Text>
       </Box>
     )
   }
 
   return (
-    <Box flexDirection="column" borderStyle="round" paddingX={1}>
+    <Box
+      flexDirection="column"
+      borderStyle="round"
+      borderColor={selected ? 'cyan' : undefined}
+      paddingX={1}
+    >
       <Box justifyContent="center">
         <Text color={rarityColor} bold>
           {stars} {bones.rarity.toUpperCase()} {bones.species.toUpperCase()}
