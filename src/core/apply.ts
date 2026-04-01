@@ -1,22 +1,32 @@
-// One-click apply: replace SALT in source or binary
+// Replace SALT in the installed Claude Code binary
 
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import { join } from 'path'
-import { execSync } from 'child_process'
-
-const CC_SOURCE_DEFAULT = join(
-  process.env.HOME ?? '~',
-  'Developer',
-  'claude-code-source-code'
-)
-
-const COMPANION_PATH = 'src/buddy/companion.ts'
-const SALT_REGEX = /const SALT = '([^']+)'/
+import { execSync, execFileSync } from 'child_process'
 
 /** Known default salt — used as fallback when binary detection fails */
 export const FALLBACK_SALT = 'friend-2026-401'
 
 // ── Binary (installed via install.sh) ──
+
+/**
+ * macOS 会在可执行文件字节被修改后判定签名失效。
+ * 这里在修补完成后做一次 ad-hoc 重签名，避免 Claude Code 启动时被系统直接 SIGKILL。
+ */
+function resignBinaryIfNeeded(filePath: string): void {
+  if (process.platform !== 'darwin') return
+
+  try {
+    execFileSync('codesign', ['--force', '--sign', '-', filePath], {
+      stdio: 'pipe',
+    })
+  } catch (err) {
+    const details = err instanceof Error ? err.message : String(err)
+    throw new Error(
+      `Binary patch succeeded, but macOS ad-hoc signing failed for ${filePath}. ` +
+      `Run "codesign --force --sign - ${filePath}" manually. Details: ${details}`
+    )
+  }
+}
 
 /** Resolve the claude binary path (follows symlinks) */
 export function findClaudeBinary(): string | null {
@@ -112,6 +122,7 @@ export function applyBinary(
   }
 
   writeFileSync(filePath, buf)
+  resignBinaryIfNeeded(filePath)
   return { oldSalt: detected.salt, filePath, patchCount: offsets.length }
 }
 
@@ -151,49 +162,6 @@ export function restoreBinary(
   }
 
   writeFileSync(filePath, buf)
+  resignBinaryIfNeeded(filePath)
   return { filePath, patchCount: offsets.length, restoredSalt: targetSalt }
-}
-
-// ── Source (from git clone) ──
-
-export function getCurrentSalt(ccSourcePath?: string): string {
-  const base = ccSourcePath ?? CC_SOURCE_DEFAULT
-  const filePath = join(base, COMPANION_PATH)
-  const content = readFileSync(filePath, 'utf-8')
-  const match = content.match(SALT_REGEX)
-  if (!match) throw new Error(`Could not find SALT in ${filePath}`)
-  return match[1]!
-}
-
-export function applySalt(
-  newSalt: string,
-  ccSourcePath?: string
-): { oldSalt: string; filePath: string } {
-  const base = ccSourcePath ?? CC_SOURCE_DEFAULT
-  const filePath = join(base, COMPANION_PATH)
-  const content = readFileSync(filePath, 'utf-8')
-  const match = content.match(SALT_REGEX)
-  if (!match) throw new Error(`Could not find SALT in ${filePath}`)
-
-  const oldSalt = match[1]!
-  const newContent = content.replace(SALT_REGEX, `const SALT = '${newSalt}'`)
-  writeFileSync(filePath, newContent, 'utf-8')
-
-  return { oldSalt, filePath }
-}
-
-export function rebuild(ccSourcePath?: string): string {
-  const base = ccSourcePath ?? CC_SOURCE_DEFAULT
-  try {
-    const output = execSync('npm run build', {
-      cwd: base,
-      encoding: 'utf-8',
-      timeout: 120_000,
-    })
-    return output
-  } catch (err) {
-    throw new Error(
-      `Build failed: ${err instanceof Error ? err.message : err}`
-    )
-  }
 }

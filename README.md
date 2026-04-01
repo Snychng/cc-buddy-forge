@@ -4,7 +4,7 @@ English | [中文](./README.zh-CN.md)
 
 Forge your ideal Claude Code buddy by brute-forcing the perfect salt value.
 
-Claude Code's buddy system generates pet attributes deterministically from `hash(userId + SALT)`. This tool searches through millions of salt values to find the combination that produces your dream pet — then applies it directly to your local Claude Code binary or source.
+Claude Code's buddy system generates pet attributes deterministically from `hash(userId + SALT)`. This tool searches through millions of salt values to find the combination that produces your dream pet — then applies it directly to your local Claude Code binary.
 
 ## Quick Start
 
@@ -62,6 +62,7 @@ ccbf search --species owl --rarity rare --user-id "your-user-id"
 ### `ccbf patch`
 
 Patch the installed Claude Code binary directly — no source code or rebuild needed. Works with `install.sh` installations.
+On macOS, `ccbf` automatically re-signs the modified binary with an ad-hoc signature so Claude Code does not fail with `SIGKILL (Code Signature Invalid)`.
 
 ```bash
 # Patch with a salt from search results
@@ -74,6 +75,7 @@ ccbf patch --salt "ccbf-0000000088" --binary /path/to/claude
 ### `ccbf restore`
 
 Restore the original salt in the Claude Code binary.
+On macOS, `ccbf` also re-signs the restored binary automatically.
 
 ```bash
 # Restore from a patched salt
@@ -92,25 +94,10 @@ ccbf preview
 ccbf preview --salt "ccbf-0000000088"
 ```
 
-### `ccbf apply`
-
-Apply a salt to Claude Code source code (for source-based installations).
-
-```bash
-# Apply salt (will ask for confirmation)
-ccbf apply --salt "ccbf-0000000088"
-
-# Apply and rebuild
-ccbf apply --salt "ccbf-0000000088" --rebuild
-
-# Specify custom source path
-ccbf apply --salt "ccbf-0000000088" --source ~/my-claude-code
-```
-
 ## How It Works
 
 1. Claude Code generates pet attributes from `mulberry32(hash(userId + SALT))`
-2. The SALT is hardcoded in the Claude Code binary/source
+2. The SALT is hardcoded in the Claude Code binary
 3. `ccbf search` auto-detects the current salt length and generates candidate salts of the exact same length
 4. Each salt produces a completely different pet — species, rarity, stats, everything
 5. `ccbf patch` does a safe byte-for-byte replacement in the binary (same length = no structural damage)
@@ -123,6 +110,7 @@ For users who installed Claude Code via `curl -fsSL https://claude.ai/install.sh
 - `ccbf patch` replaces the salt in-place — no source code, no rebuild, no recompilation
 - `ccbf restore` reverts to the original salt at any time
 - Safe byte-for-byte replacement: new salt is always the exact same length as the original
+- On macOS, patched/restored binaries are automatically ad-hoc signed after modification
 
 ## Performance
 
@@ -147,12 +135,11 @@ src/
     roller.ts        # PRNG (mulberry32) + hash + roll logic
     search.ts        # Brute-force search engine
     sprites.ts       # ASCII art for all 18 species
-    apply.ts         # Salt replacement (binary patch + source)
+    apply.ts         # Salt replacement (binary patch)
   tui/
     PetCard.tsx      # Pet preview card (sprite + stats)
     SearchView.tsx   # Search progress + results
     PreviewView.tsx  # Current vs preview comparison
-    ApplyView.tsx    # Apply confirmation UI
   utils/
     config.ts        # userId auto-detection
 ```
@@ -177,4 +164,3 @@ bun run tsc --noEmit
 - userId is auto-detected from `~/.claude.json` or `~/.claude/.config.json`
 - Only modifies your local installation — does not affect other users
 - The `patch` command modifies the Claude Code binary at `~/.local/share/claude/versions/`
-- The `apply` command modifies `src/buddy/companion.ts` in your Claude Code source directory

@@ -8,8 +8,7 @@
   "scripts": {
     "start": "bun run src/index.tsx",
     "search": "bun run src/index.tsx search",
-    "preview": "bun run src/index.tsx preview",
-    "apply": "bun run src/index.tsx apply"
+    "preview": "bun run src/index.tsx preview"
   },
   "dependencies": {
     "ink": "^5.2.0",

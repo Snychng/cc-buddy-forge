@@ -7,7 +7,6 @@ import { SPECIES, RARITIES, EYES, HATS, STAT_NAMES } from './core/types.js'
 import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/types.js'
 import { SearchView } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
-import { ApplyView } from './tui/ApplyView.js'
 import { applyBinary, restoreBinary, findClaudeBinary, detectBinarySalt, FALLBACK_SALT } from './core/apply.js'
 import { rollWithSalt } from './core/roller.js'
 
@@ -101,26 +100,6 @@ program
     const instance = render(<PreviewView userId={userId} salt={opts.salt} />)
     instance.unmount()
     process.exit(0)
-  })
-
-program
-  .command('apply')
-  .description('Apply a salt value to claude-code source')
-  .requiredOption('--salt <salt>', 'Salt value to apply')
-  .option('--user-id <id>', 'Override userId')
-  .option('--source <path>', 'Path to claude-code source')
-  .option('--rebuild', 'Rebuild claude-code after applying')
-  .action((opts) => {
-    const userId = opts.userId ?? detectUserId()
-    render(
-      <ApplyView
-        userId={userId}
-        salt={opts.salt}
-        ccSourcePath={opts.source}
-        shouldRebuild={opts.rebuild}
-        onExit={() => process.exit(0)}
-      />
-    )
   })
 
 program
