@@ -1,24 +1,44 @@
 {
   "name": "cc-buddy-forge",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
+  "homepage": "https://github.com/Snychng/cc-buddy-forge",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Snychng/cc-buddy-forge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Snychng/cc-buddy-forge/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
-    "ccbf": "./src/index.tsx"
+    "ccbf": "bin/ccbf.js"
   },
   "scripts": {
     "start": "bun run src/index.tsx",
     "search": "bun run src/index.tsx search",
     "preview": "bun run src/index.tsx preview",
     "build:release": "bun run scripts/build-release.ts",
-    "generate:formula": "bun run scripts/generate-homebrew-formula.ts",
-    "release:prepare": "bun run build:release && bun run generate:formula"
+    "release:prepare": "bun run build:release",
+    "postinstall": "node ./scripts/postinstall.js"
   },
+  "files": [
+    "bin",
+    "scripts",
+    "README.md",
+    "README.zh-CN.md"
+  ],
   "dependencies": {
     "ink": "^5.2.0",
     "react": "^18.3.1",
     "commander": "^13.1.0",
     "chalk": "^5.4.1",
-    "react-devtools-core": "^6.1.5"
+    "react-devtools-core": "^4.28.5"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",

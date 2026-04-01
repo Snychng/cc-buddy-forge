@@ -2,6 +2,7 @@
 import React from 'react'
 import { render } from 'ink'
 import { Command } from 'commander'
+import packageJson from '../package.json'
 import { detectUserId } from './utils/config.js'
 import { getRecordedOriginalSalt, recordOriginalSalt } from './utils/state.js'
 import { SPECIES, RARITIES, EYES, HATS, STAT_NAMES } from './core/types.js'
@@ -22,7 +23,7 @@ process.on('SIGTERM', () => { restoreCursor(); process.exit(143) })
 const program = new Command()
   .name('ccbf')
   .description('🔨 Forge your ideal Claude Code buddy by finding the perfect salt')
-  .version('1.0.0')
+  .version(packageJson.version)
 
 program.hook('preAction', (_thisCommand, actionCommand) => {
   const opts = actionCommand.opts()

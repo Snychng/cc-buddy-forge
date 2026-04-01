@@ -43,9 +43,6 @@ jobs:
         run: |
           bun run build:release
 
-      - name: Generate Homebrew formula
-        run: bun run generate:formula
-
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -55,34 +52,25 @@ jobs:
               dist/release/*.tar.gz \
               dist/release/checksums.txt \
               dist/release/manifest.json \
-              dist/release/ccbf.rb \
               --clobber
           else
             gh release create "${GITHUB_REF_NAME}" \
               dist/release/*.tar.gz \
               dist/release/checksums.txt \
               dist/release/manifest.json \
-              dist/release/ccbf.rb \
               --title "${GITHUB_REF_NAME}" \
               --generate-notes
           fi
 
-      - name: Update Formula on main
+      - name: Setup Node for npm publish
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
+      - name: Publish package to npm
+        if: ${{ secrets.NPM_TOKEN != '' }}
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          git fetch origin main
-          git checkout main
-          mkdir -p Formula
-          cp dist/release/ccbf.rb Formula/ccbf.rb
-
-          if git diff --quiet -- Formula/ccbf.rb; then
-            echo "Formula/ccbf.rb is already up to date"
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/ccbf.rb
-          git commit -m "chore: update Homebrew formula for ${GITHUB_REF_NAME}"
-          git push origin main
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish

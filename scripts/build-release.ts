@@ -2,12 +2,7 @@ import { createHash } from 'crypto'
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { basename, join, resolve } from 'path'
 import { execFileSync } from 'child_process'
-
-type ReleaseTarget = {
-  id: string
-  bunTarget: string
-  homebrewKey?: 'darwin-arm64' | 'darwin-x64' | 'linux-x64'
-}
+import { releaseTargets } from './release-targets.js'
 
 type ReleaseManifest = {
   name: string
@@ -20,15 +15,8 @@ type ReleaseManifest = {
     bunTarget: string
     file: string
     sha256: string
-    homebrewKey?: 'darwin-arm64' | 'darwin-x64' | 'linux-x64'
   }>
 }
-
-const targets: ReleaseTarget[] = [
-  { id: 'darwin-arm64', bunTarget: 'bun-darwin-arm64', homebrewKey: 'darwin-arm64' },
-  { id: 'darwin-x64', bunTarget: 'bun-darwin-x64', homebrewKey: 'darwin-x64' },
-  { id: 'linux-x64', bunTarget: 'bun-linux-x64-baseline', homebrewKey: 'linux-x64' },
-]
 
 function readPackageJson(): { name: string; version: string } {
   const packageJsonPath = resolve('package.json')
@@ -68,7 +56,7 @@ const manifest: ReleaseManifest = {
 rmSync(releaseDir, { recursive: true, force: true })
 ensureDir(stagingDir)
 
-for (const target of targets) {
+for (const target of releaseTargets) {
   const targetStageDir = join(stagingDir, target.id)
   const binaryPath = join(targetStageDir, 'ccbf')
   const archiveName = `ccbf-${version}-${target.id}.tar.gz`
@@ -96,7 +84,6 @@ for (const target of targets) {
     bunTarget: target.bunTarget,
     file: basename(archivePath),
     sha256: sha256For(archivePath),
-    homebrewKey: target.homebrewKey,
   })
 }
 
