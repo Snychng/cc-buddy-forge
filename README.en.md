@@ -20,6 +20,12 @@ npm install -g cc-buddy-forge
 ccbf --help
 ```
 
+If you hit a permissions error during install, try:
+
+```bash
+sudo npm install -g cc-buddy-forge
+```
+
 This installs a small Node launcher, then downloads the matching precompiled `ccbf` binary from GitHub Releases during `postinstall`.
 Requires Node 18+ for the npm-installed launcher.
 You can also download the matching archive for your platform from GitHub Releases, extract it, and put `ccbf` on your `PATH`.

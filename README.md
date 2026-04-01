@@ -20,6 +20,12 @@ npm install -g cc-buddy-forge
 ccbf --help
 ```
 
+如果安装时遇到权限不足，可以改用：
+
+```bash
+sudo npm install -g cc-buddy-forge
+```
+
 这种方式会先安装一个很小的 Node 启动器，然后在 `postinstall` 阶段自动从 GitHub Releases 下载对应平台的预编译 `ccbf` 二进制。
 该安装方式要求本机 Node 版本不低于 18。
 你也可以从 GitHub Releases 下载对应平台的压缩包，解压后将 `ccbf` 放到你的 `PATH` 中。

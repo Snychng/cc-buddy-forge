@@ -31,8 +31,7 @@
     "bin",
     "scripts",
     "README.md",
-    "README.en.md",
-    "README.zh-CN.md"
+    "README.en.md"
   ],
   "dependencies": {
     "ink": "^5.2.0",
