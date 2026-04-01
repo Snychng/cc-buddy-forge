@@ -3,11 +3,12 @@ import React from 'react'
 import { render } from 'ink'
 import { Command } from 'commander'
 import { detectUserId } from './utils/config.js'
+import { getRecordedOriginalSalt, recordOriginalSalt } from './utils/state.js'
 import { SPECIES, RARITIES, EYES, HATS, STAT_NAMES } from './core/types.js'
 import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/types.js'
 import { SearchView } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
-import { applyBinary, restoreBinary, findClaudeBinary, detectBinarySalt, FALLBACK_SALT } from './core/apply.js'
+import { applyBinary, restoreBinary, detectBinarySalt, FALLBACK_SALT, resolveBinaryPath } from './core/apply.js'
 import { rollWithSalt } from './core/roller.js'
 
 /** Restore cursor visibility on exit — ink hides it and may not restore it */
@@ -22,6 +23,20 @@ const program = new Command()
   .name('ccbf')
   .description('🔨 Forge your ideal Claude Code buddy by finding the perfect salt')
   .version('1.0.0')
+
+program.hook('preAction', (_thisCommand, actionCommand) => {
+  const opts = actionCommand.opts()
+  const filePath = resolveBinaryPath(typeof opts.binary === 'string' ? opts.binary : undefined)
+  if (!filePath) return
+
+  const detected = detectBinarySalt(filePath)
+  if (!detected) return
+
+  // 只在当前 salt 看起来还是原始值时自动建档，避免首次运行时把已修补值误记为原始值。
+  if (detected.salt.startsWith('ccbf-')) return
+
+  recordOriginalSalt(filePath, detected.salt)
+})
 
 program
   .command('search')
@@ -110,9 +125,10 @@ program
   .option('--user-id <id>', 'Override userId')
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
-    const detected = detectBinarySalt(opts.binary)
+    const filePath = resolveBinaryPath(opts.binary)
+    const detected = detectBinarySalt(filePath ?? undefined)
 
-    if (!detected) {
+    if (!filePath || !detected) {
       console.error('❌ Could not detect salt in Claude Code binary.')
       console.error('   Is Claude Code installed? Try: curl -fsSL https://claude.ai/install.sh | bash')
       process.exit(1)
@@ -131,9 +147,13 @@ program
     console.log(`🐾 Result: ${roll.bones.rarity} ${roll.bones.species}${roll.bones.shiny ? ' ✨' : ''}\n`)
 
     try {
-      const result = applyBinary(opts.salt, opts.binary)
+      const saved = recordOriginalSalt(filePath, detected.salt)
+      const result = applyBinary(opts.salt, filePath)
       console.log(`✅ Patched ${result.patchCount} occurrence(s) in ${result.filePath}`)
       console.log(`   Old: ${result.oldSalt} → New: ${opts.salt}`)
+      if (saved) {
+        console.log(`   Saved original salt for one-command restore: ${detected.salt}`)
+      }
       console.log(`\n   Restart Claude Code to see your new buddy!`)
     } catch (err) {
       console.error(`❌ ${err instanceof Error ? err.message : err}`)
@@ -144,13 +164,42 @@ program
 program
   .command('restore')
   .description('Restore the original salt in the Claude Code binary')
-  .requiredOption('--salt <salt>', 'The current (patched) salt to find and replace')
   .option('--binary <path>', 'Path to claude binary (auto-detected)')
   .action((opts) => {
     try {
-      const result = restoreBinary(opts.salt, opts.binary)
+      const filePath = resolveBinaryPath(opts.binary)
+      if (!filePath) {
+        throw new Error('Could not find claude binary. Use --binary <path> or install Claude Code first.')
+      }
+
+      const detected = detectBinarySalt(filePath)
+      if (!detected) {
+        throw new Error('Could not detect the current salt in Claude Code binary.')
+      }
+
+      const originalSalt = getRecordedOriginalSalt(filePath)
+      if (!originalSalt) {
+        if (!detected.salt.startsWith('ccbf-')) {
+          recordOriginalSalt(filePath, detected.salt)
+          console.log(`ℹ️ No saved original salt existed yet. Recorded current salt: ${detected.salt}`)
+          console.log('✅ Claude Code is already using its original buddy salt.')
+          return
+        }
+
+        throw new Error(
+          `No saved original salt found for ${filePath}. ` +
+          'Automatic restore only works after ccbf has recorded the binary before patching.'
+        )
+      }
+
+      const result = restoreBinary(originalSalt, filePath)
+      if (result.patchCount === 0) {
+        console.log(`✅ Claude Code is already using the original salt: ${result.restoredSalt}`)
+        return
+      }
+
       console.log(`✅ Restored ${result.patchCount} occurrence(s) in ${result.filePath}`)
-      console.log(`   Restored to: ${result.restoredSalt}`)
+      console.log(`   Old: ${result.previousSalt} → Restored: ${result.restoredSalt}`)
     } catch (err) {
       console.error(`❌ ${err instanceof Error ? err.message : err}`)
       process.exit(1)

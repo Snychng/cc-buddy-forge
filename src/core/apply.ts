@@ -1,6 +1,6 @@
 // Replace SALT in the installed Claude Code binary
 
-import { readFileSync, writeFileSync, existsSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, realpathSync } from 'fs'
 import { execSync, execFileSync } from 'child_process'
 
 /** Known default salt — used as fallback when binary detection fails */
@@ -33,10 +33,20 @@ export function findClaudeBinary(): string | null {
   try {
     const out = execSync('which claude', { encoding: 'utf-8' }).trim()
     if (!out) return null
-    const resolved = execSync(`realpath "${out}"`, { encoding: 'utf-8' }).trim()
-    return resolved
+    return realpathSync(out)
   } catch {
     return null
+  }
+}
+
+/** Resolve a provided binary path to a stable real path */
+export function resolveBinaryPath(binaryPath?: string): string | null {
+  if (!binaryPath) return findClaudeBinary()
+
+  try {
+    return realpathSync(binaryPath)
+  } catch {
+    return existsSync(binaryPath) ? binaryPath : null
   }
 }
 
@@ -46,7 +56,7 @@ export function findClaudeBinary(): string | null {
  * Returns the salt string and its byte length.
  */
 export function detectBinarySalt(binaryPath?: string): { salt: string; length: number } | null {
-  const filePath = binaryPath ?? findClaudeBinary()
+  const filePath = resolveBinaryPath(binaryPath)
   if (!filePath || !existsSync(filePath)) return null
 
   const buf = readFileSync(filePath)
@@ -80,7 +90,7 @@ export function applyBinary(
   newSalt: string,
   binaryPath?: string
 ): { oldSalt: string; filePath: string; patchCount: number } {
-  const filePath = binaryPath ?? findClaudeBinary()
+  const filePath = resolveBinaryPath(binaryPath)
   if (!filePath) {
     throw new Error('Could not find claude binary. Use --binary <path> or install Claude Code first.')
   }
@@ -128,21 +138,32 @@ export function applyBinary(
 
 /** Restore binary to original salt */
 export function restoreBinary(
-  currentSalt: string,
+  originalSalt: string,
   binaryPath?: string
-): { filePath: string; patchCount: number; restoredSalt: string } {
-  const filePath = binaryPath ?? findClaudeBinary()
+): { filePath: string; patchCount: number; restoredSalt: string; previousSalt: string } {
+  const filePath = resolveBinaryPath(binaryPath)
   if (!filePath) throw new Error('Could not find claude binary.')
   if (!existsSync(filePath)) throw new Error(`Binary not found: ${filePath}`)
 
-  const buf = readFileSync(filePath)
-  const searchBytes = Buffer.from(currentSalt, 'utf-8')
+  const detected = detectBinarySalt(filePath)
+  if (!detected) {
+    throw new Error('Could not detect the current salt in binary. The binary format may have changed.')
+  }
 
-  // Restore to FALLBACK_SALT, padded/truncated to match length
-  const targetSalt = FALLBACK_SALT.length === currentSalt.length
-    ? FALLBACK_SALT
-    : FALLBACK_SALT.padEnd(currentSalt.length, '0').slice(0, currentSalt.length)
-  const restoreBytes = Buffer.from(targetSalt, 'utf-8')
+  if (detected.salt === originalSalt) {
+    return { filePath, patchCount: 0, restoredSalt: originalSalt, previousSalt: detected.salt }
+  }
+
+  if (detected.length !== originalSalt.length) {
+    throw new Error(
+      `Recorded original salt "${originalSalt}" is ${originalSalt.length} chars, ` +
+      `but current binary salt "${detected.salt}" is ${detected.length} chars.`
+    )
+  }
+
+  const buf = readFileSync(filePath)
+  const searchBytes = Buffer.from(detected.salt, 'utf-8')
+  const restoreBytes = Buffer.from(originalSalt, 'utf-8')
 
   const offsets: number[] = []
   let pos = 0
@@ -154,7 +175,7 @@ export function restoreBinary(
   }
 
   if (offsets.length === 0) {
-    throw new Error(`Could not find "${currentSalt}" in binary.`)
+    throw new Error(`Could not find "${detected.salt}" in binary.`)
   }
 
   for (const offset of offsets) {
@@ -163,5 +184,5 @@ export function restoreBinary(
 
   writeFileSync(filePath, buf)
   resignBinaryIfNeeded(filePath)
-  return { filePath, patchCount: offsets.length, restoredSalt: targetSalt }
+  return { filePath, patchCount: offsets.length, restoredSalt: originalSalt, previousSalt: detected.salt }
 }

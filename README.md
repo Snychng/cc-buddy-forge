@@ -63,6 +63,7 @@ ccbf search --species owl --rarity rare --user-id "your-user-id"
 
 Patch the installed Claude Code binary directly — no source code or rebuild needed. Works with `install.sh` installations.
 On macOS, `ccbf` automatically re-signs the modified binary with an ad-hoc signature so Claude Code does not fail with `SIGKILL (Code Signature Invalid)`.
+On first use, `ccbf` records the binary's original salt so `ccbf restore` can later revert your buddy automatically.
 
 ```bash
 # Patch with a salt from search results
@@ -74,12 +75,15 @@ ccbf patch --salt "ccbf-0000000088" --binary /path/to/claude
 
 ### `ccbf restore`
 
-Restore the original salt in the Claude Code binary.
+Restore the original salt in the Claude Code binary using the saved snapshot from your first run or first patch.
 On macOS, `ccbf` also re-signs the restored binary automatically.
 
 ```bash
-# Restore from a patched salt
-ccbf restore --salt "ccbf-0000000088"
+# Restore your original buddy automatically
+ccbf restore
+
+# Restore a specific Claude binary
+ccbf restore --binary /path/to/claude
 ```
 
 ### `ccbf preview`
@@ -101,6 +105,7 @@ ccbf preview --salt "ccbf-0000000088"
 3. `ccbf search` auto-detects the current salt length and generates candidate salts of the exact same length
 4. Each salt produces a completely different pet — species, rarity, stats, everything
 5. `ccbf patch` does a safe byte-for-byte replacement in the binary (same length = no structural damage)
+6. `ccbf` saves the original salt in `~/.ccbf.json` so restore can be one command later
 
 ## Binary Patching
 
@@ -108,7 +113,7 @@ For users who installed Claude Code via `curl -fsSL https://claude.ai/install.sh
 
 - `ccbf search` auto-detects the salt from the installed binary and generates salts of matching length
 - `ccbf patch` replaces the salt in-place — no source code, no rebuild, no recompilation
-- `ccbf restore` reverts to the original salt at any time
+- `ccbf restore` reverts to the recorded original salt at any time
 - Safe byte-for-byte replacement: new salt is always the exact same length as the original
 - On macOS, patched/restored binaries are automatically ad-hoc signed after modification
 
@@ -142,6 +147,7 @@ src/
     PreviewView.tsx  # Current vs preview comparison
   utils/
     config.ts        # userId auto-detection
+    state.ts         # saved original salt snapshots
 ```
 
 ## Development
@@ -162,5 +168,6 @@ bun run tsc --noEmit
 
 - Requires Bun (not Node) — the hash function uses `Bun.hash` for exact parity with Claude Code
 - userId is auto-detected from `~/.claude.json` or `~/.claude/.config.json`
+- Original binary salts are stored in `~/.ccbf.json`
 - Only modifies your local installation — does not affect other users
 - The `patch` command modifies the Claude Code binary at `~/.local/share/claude/versions/`

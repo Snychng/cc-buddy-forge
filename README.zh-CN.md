@@ -63,6 +63,7 @@ ccbf search --species owl --rarity rare --user-id "your-user-id"
 
 直接修补已安装的 Claude Code 二进制文件，无需源码或重新构建。适用于通过 `install.sh` 安装的用户。
 在 macOS 上，`ccbf` 会在修改后二进制自动执行 ad-hoc 重签名，避免 Claude Code 因 `SIGKILL (Code Signature Invalid)` 无法启动。
+首次运行或首次修补时，`ccbf` 会自动记录该二进制的原始 salt，后续可直接用 `ccbf restore` 一键恢复。
 
 ```bash
 # 使用搜索结果中的 salt 进行修补
@@ -74,12 +75,15 @@ ccbf patch --salt "ccbf-0000000088" --binary /path/to/claude
 
 ### `ccbf restore` — 恢复原始 salt
 
-恢复 Claude Code 二进制文件中的原始 salt。
+使用首次运行或首次修补时保存的快照，自动恢复 Claude Code 二进制文件中的原始 salt。
 在 macOS 上，恢复后的二进制同样会自动重新签名。
 
 ```bash
-# 从已修补的 salt 恢复
-ccbf restore --salt "ccbf-0000000088"
+# 自动恢复原来的宠物
+ccbf restore
+
+# 恢复指定 Claude 二进制
+ccbf restore --binary /path/to/claude
 ```
 
 ### `ccbf preview` — 预览宠物
@@ -101,6 +105,7 @@ ccbf preview --salt "ccbf-0000000088"
 3. `ccbf search` 自动检测当前 salt 长度，生成完全等长的候选 salt
 4. 每个不同的 salt 会产生完全不同的宠物 — 物种、稀有度、属性值全部重新生成
 5. `ccbf patch` 在二进制中进行安全的逐字节替换（等长 = 不破坏结构）
+6. `ccbf` 会将原始 salt 保存到 `~/.ccbf.json`，因此后续恢复只需要一条命令
 
 ## 二进制修补
 
@@ -108,7 +113,7 @@ ccbf preview --salt "ccbf-0000000088"
 
 - `ccbf search` 自动从已安装的二进制文件中检测 salt 并生成匹配长度的 salt
 - `ccbf patch` 原地替换 salt — 无需源码、无需重新构建、无需重新编译
-- `ccbf restore` 随时恢复原始 salt
+- `ccbf restore` 随时恢复已记录的原始 salt
 - 安全的逐字节替换：新 salt 始终与原始 salt 完全等长
 - 在 macOS 上，修补/恢复后二进制会自动执行 ad-hoc 重签名
 
@@ -142,6 +147,7 @@ src/
     PreviewView.tsx  # 当前 vs 预览对比
   utils/
     config.ts        # userId 自动检测
+    state.ts         # 原始 salt 快照存储
 ```
 
 ## 开发
@@ -162,5 +168,6 @@ bun run tsc --noEmit
 
 - 需要 Bun（不支持 Node）— 哈希函数使用 `Bun.hash` 以确保与 Claude Code 完全一致
 - userId 自动从 `~/.claude.json` 或 `~/.claude/.config.json` 读取
+- 原始二进制 salt 会保存在 `~/.ccbf.json`
 - 仅修改本地安装，不影响其他用户
 - `patch` 命令修改 `~/.local/share/claude/versions/` 下的 Claude Code 二进制文件
