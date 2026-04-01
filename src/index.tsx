@@ -9,7 +9,15 @@ import { SPECIES, RARITIES, EYES, HATS, STAT_NAMES } from './core/types.js'
 import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/types.js'
 import { SearchView, type SearchViewCompletion } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
-import { applyBinary, restoreBinary, detectBinarySalt, FALLBACK_SALT, resolveBinaryPath } from './core/apply.js'
+import {
+  applyBinary,
+  restoreBinary,
+  detectBinarySalt,
+  FALLBACK_SALT,
+  resolveBinaryPath,
+  inspectClaudeInstallation,
+  type ClaudeInstallMethod,
+} from './core/apply.js'
 import { rollWithSalt } from './core/roller.js'
 
 /** Restore cursor visibility on exit — ink hides it and may not restore it */
@@ -20,6 +28,21 @@ process.on('exit', restoreCursor)
 process.on('SIGINT', () => { restoreCursor(); process.exit(130) })
 process.on('SIGTERM', () => { restoreCursor(); process.exit(143) })
 
+function formatInstallMethod(method: ClaudeInstallMethod | null): string {
+  switch (method) {
+    case 'native':
+      return 'native'
+    case 'npm-global':
+      return 'npm-global'
+    case 'npm-local':
+      return 'npm-local'
+    case 'wrapper':
+      return 'wrapper'
+    default:
+      return 'unknown'
+  }
+}
+
 function applySaltSelection({
   salt,
   binaryPath,
@@ -29,14 +52,16 @@ function applySaltSelection({
   binaryPath?: string
   userId: string
 }) {
-  const filePath = resolveBinaryPath(binaryPath)
-  const detected = detectBinarySalt(filePath ?? undefined)
+  const inspection = inspectClaudeInstallation(binaryPath)
+  const filePath = inspection.resolvedPath
+  const detected = inspection.detectedSalt
 
   if (!filePath || !detected) {
     console.error('❌ Could not detect salt in Claude Code binary.')
     console.error('   If Claude Code is installed, try passing the real binary path explicitly:')
     console.error('   ccbf search --binary /path/to/claude')
     console.error('   ccbf patch --binary /path/to/claude --salt "ccbf-0000000088"')
+    console.error('   Or run: ccbf doctor')
     process.exit(1)
   }
 
@@ -72,6 +97,8 @@ const program = new Command()
   .version(packageJson.version)
 
 program.hook('preAction', (_thisCommand, actionCommand) => {
+  if (actionCommand.name() === 'doctor') return
+
   const opts = actionCommand.opts()
   const filePath = resolveBinaryPath(typeof opts.binary === 'string' ? opts.binary : undefined)
   if (!filePath) return
@@ -84,6 +111,46 @@ program.hook('preAction', (_thisCommand, actionCommand) => {
 
   recordOriginalSalt(filePath, detected.salt)
 })
+
+program
+  .command('doctor')
+  .description('Inspect how ccbf resolves your Claude Code binary')
+  .option('--binary <path>', 'Path to claude binary or wrapper to inspect')
+  .action((opts) => {
+    const inspection = inspectClaudeInstallation(opts.binary)
+    const targetLabel = opts.binary ? opts.binary : 'auto-detect'
+
+    console.log('🩺 ccbf doctor\n')
+    console.log(`Input: ${targetLabel}`)
+    console.log(`Platform: ${process.platform}-${process.arch}`)
+    console.log(`Resolved binary: ${inspection.resolvedPath ?? 'not found'}`)
+    console.log(`Install method: ${formatInstallMethod(inspection.installMethod)}`)
+    console.log(
+      `Salt detection: ${inspection.detectedSalt
+        ? `${inspection.detectedSalt.salt} (${inspection.detectedSalt.length} chars)`
+        : 'not found'}`
+    )
+
+    if (inspection.candidates.length > 0) {
+      console.log('\nCandidates:')
+      for (const candidate of inspection.candidates.slice(0, 12)) {
+        const status = candidate.detectedSalt ? 'OK' : 'MISS'
+        const salt = candidate.detectedSalt
+          ? `${candidate.detectedSalt.salt} (${candidate.detectedSalt.length})`
+          : 'no salt'
+        console.log(`- [${status}] ${candidate.path}`)
+        console.log(`  method=${formatInstallMethod(candidate.installMethod)} salt=${salt}`)
+      }
+    } else {
+      console.log('\nCandidates: none')
+    }
+
+    if (!inspection.detectedSalt) {
+      console.log('\nAdvice:')
+      console.log('- Try passing the real Claude binary path with --binary')
+      console.log('- If you installed Claude Code via npm, point to the Invoked path from `claude doctor`')
+    }
+  })
 
 program
   .command('search')

@@ -55,6 +55,7 @@ ccbf --help
 ### `ccbf search`
 
 Search for salt values that produce pets matching your criteria. Salt length is auto-detected from your installed Claude Code binary.
+If your Claude Code install comes from npm, or auto-detection fails, run `ccbf doctor` first to see which real target file `ccbf` is resolving.
 
 ```bash
 # Find legendary dragons (default: 1M iterations)
@@ -122,6 +123,26 @@ ccbf preview
 
 # Preview a specific salt
 ccbf preview --salt "ccbf-0000000088"
+```
+
+### `ccbf doctor`
+
+Show the Claude Code path that `ccbf` resolved, the inferred install method, and whether salt detection succeeded.
+If `search` / `patch` / `restore` fails with `Could not detect salt in Claude Code binary`, run this first.
+
+```bash
+# Inspect the current Claude Code installation
+ccbf doctor
+
+# Inspect a specific wrapper or binary path
+ccbf doctor --binary /path/to/claude
+```
+
+If `ccbf doctor` shows that your PATH resolves to a wrapper, or to an npm-installed Claude Code entrypoint, reuse the resolved real target path with `search` / `patch`:
+
+```bash
+ccbf search --binary /path/to/real/claude
+ccbf patch --binary /path/to/real/claude --salt "ccbf-0000000088"
 ```
 
 ## How It Works
@@ -205,5 +226,6 @@ bun run tsc --noEmit
 - Only modifies your local installation — does not affect other users
 - The `patch` command modifies the auto-detected local Claude Code binary; on macOS / Linux it is typically under `~/.local/share/claude/versions/`
 - npm installation currently supports the same precompiled targets as GitHub Releases: macOS arm64/x64, Linux x64, and Windows x64
+- If Claude Code was installed via npm, your PATH may resolve to a wrapper first; run `ccbf doctor` and, if needed, pass the resolved real target via `--binary`
 - If PATH resolves to a Windows wrapper such as `claude.cmd`, you can still point to the real binary with `--binary C:\\path\\to\\claude.exe`
 - To publish to npm from GitHub Actions, add `NPM_TOKEN` in repository secrets

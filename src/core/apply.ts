@@ -8,6 +8,31 @@ import { homedir } from 'os'
 /** Known default salt — used as fallback when binary detection fails */
 export const FALLBACK_SALT = 'friend-2026-401'
 
+export type ClaudeInstallMethod =
+  | 'native'
+  | 'npm-global'
+  | 'npm-local'
+  | 'wrapper'
+  | 'unknown'
+
+export type ClaudeSaltDetection = {
+  salt: string
+  length: number
+}
+
+export type ClaudeCandidateInspection = {
+  path: string
+  installMethod: ClaudeInstallMethod
+  detectedSalt: ClaudeSaltDetection | null
+}
+
+export type ClaudeInstallationInspection = {
+  resolvedPath: string | null
+  installMethod: ClaudeInstallMethod | null
+  detectedSalt: ClaudeSaltDetection | null
+  candidates: ClaudeCandidateInspection[]
+}
+
 // ── Binary (installed via install.sh) ──
 
 /**
@@ -55,6 +80,14 @@ function detectSaltFromFile(filePath: string): { salt: string; length: number } 
     return null
   }
   return detectSaltFromBytes(readFileSync(filePath))
+}
+
+function isRegularFile(filePath: string): boolean {
+  try {
+    return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
 }
 
 function normalizeExistingPath(filePath: string): string | null {
@@ -230,6 +263,33 @@ function uniquePaths(paths: Array<string | null | undefined>): string[] {
   return results
 }
 
+function inferInstallMethod(filePath: string): ClaudeInstallMethod {
+  const normalized = filePath.replaceAll('\\', '/').toLowerCase()
+  const ext = extname(normalized)
+
+  if (['.cmd', '.bat', '.ps1', '.sh'].includes(ext)) return 'wrapper'
+  if (
+    normalized.includes('/.local/share/claude/versions/') ||
+    normalized.includes('/.claude/local/') ||
+    normalized.includes('/programs/claudecode/')
+  ) {
+    return 'native'
+  }
+  if (normalized.includes('/node_modules/@anthropic-ai/claude-code/')) {
+    if (
+      normalized.includes('/appdata/roaming/npm/') ||
+      normalized.includes('/lib/node_modules/') ||
+      normalized.includes('/.npm-global/') ||
+      normalized.includes('/pnpm/global/')
+    ) {
+      return 'npm-global'
+    }
+    return 'npm-local'
+  }
+
+  return 'unknown'
+}
+
 function getClaudeCandidatePaths(seedPath?: string): string[] {
   const home = homedir()
   const localAppData = process.env.LOCALAPPDATA
@@ -291,24 +351,32 @@ function getClaudeCandidatePaths(seedPath?: string): string[] {
   ])
 }
 
+export function inspectClaudeInstallation(binaryPath?: string): ClaudeInstallationInspection {
+  const candidatePaths = getClaudeCandidatePaths(binaryPath).filter(isRegularFile)
+  const candidates = candidatePaths.map((path): ClaudeCandidateInspection => ({
+    path,
+    installMethod: inferInstallMethod(path),
+    detectedSalt: detectSaltFromFile(path),
+  }))
+
+  const resolved = candidates.find(candidate => candidate.detectedSalt) ?? candidates[0] ?? null
+
+  return {
+    resolvedPath: resolved?.path ?? null,
+    installMethod: resolved?.installMethod ?? null,
+    detectedSalt: resolved?.detectedSalt ?? null,
+    candidates,
+  }
+}
+
 /** Resolve the claude binary path (follows symlinks) */
 export function findClaudeBinary(): string | null {
-  const candidates = getClaudeCandidatePaths()
-  for (const candidate of candidates) {
-    if (detectSaltFromFile(candidate)) return candidate
-  }
-
-  return candidates[0] ?? null
+  return inspectClaudeInstallation().resolvedPath
 }
 
 /** Resolve a provided binary path to a stable real path */
 export function resolveBinaryPath(binaryPath?: string): string | null {
-  const candidates = getClaudeCandidatePaths(binaryPath)
-  for (const candidate of candidates) {
-    if (detectSaltFromFile(candidate)) return candidate
-  }
-
-  return candidates[0] ?? null
+  return inspectClaudeInstallation(binaryPath).resolvedPath
 }
 
 /**

@@ -55,6 +55,7 @@ ccbf --help
 ### `ccbf search` — 搜索理想宠物
 
 搜索符合目标属性的 salt 值。Salt 长度会自动从已安装的 Claude Code 二进制文件中检测。
+如果你的 Claude Code 是通过 npm 安装，或者自动探测失败，建议先运行 `ccbf doctor` 查看 `ccbf` 实际解析到了哪个目标文件。
 
 ```bash
 # 搜索传说级龙（默认搜索 100 万次）
@@ -122,6 +123,26 @@ ccbf preview
 
 # 预览指定 salt 的宠物
 ccbf preview --salt "ccbf-0000000088"
+```
+
+### `ccbf doctor` — 检查二进制定位
+
+输出 `ccbf` 当前解析到的 Claude Code 目标路径、推断安装方式，以及该路径是否成功检测到 salt。
+当 `search` / `patch` / `restore` 报错 `Could not detect salt in Claude Code binary` 时，先运行这个命令排查。
+
+```bash
+# 自动检查当前 Claude Code 安装
+ccbf doctor
+
+# 检查一个显式传入的 wrapper 或二进制路径
+ccbf doctor --binary /path/to/claude
+```
+
+如果 `ccbf doctor` 显示你的 PATH 命中了 wrapper，或者命中了 npm 安装的 Claude Code 入口，可以直接把它解析出的真实目标路径再传给 `search` / `patch`：
+
+```bash
+ccbf search --binary /path/to/real/claude
+ccbf patch --binary /path/to/real/claude --salt "ccbf-0000000088"
 ```
 
 ## 工作原理
@@ -205,5 +226,6 @@ bun run tsc --noEmit
 - 仅修改本地安装，不影响其他用户
 - `patch` 命令会修改自动检测到的本地 Claude Code 二进制；在 macOS / Linux 上通常位于 `~/.local/share/claude/versions/`
 - npm 安装当前支持的平台与 GitHub Releases 保持一致：macOS arm64/x64、Linux x64、Windows x64
+- 如果 Claude Code 是通过 npm 安装，PATH 可能先命中 wrapper；此时建议先运行 `ccbf doctor`，必要时再把解析出的真实目标路径传给 `--binary`
 - 如果 Windows 上 PATH 命中了 `claude.cmd` 之类的包装器，仍可通过 `--binary C:\\path\\to\\claude.exe` 指向真实二进制
 - 如果要通过 GitHub Actions 自动发布 npm，需要在仓库 secrets 中配置 `NPM_TOKEN`
