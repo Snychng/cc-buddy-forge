@@ -1,5 +1,7 @@
 # cc-buddy-forge (ccbf)
 
+English | [中文](./README.zh-CN.md)
+
 Forge your ideal Claude Code buddy by brute-forcing the perfect salt value.
 
 Claude Code's buddy system generates pet attributes deterministically from `hash(userId + SALT)`. This tool searches through millions of salt values to find the combination that produces your dream pet — then applies it to your local Claude Code source.
@@ -11,7 +13,7 @@ Claude Code's buddy system generates pet attributes deterministically from `hash
 # https://bun.sh
 
 # Clone and install
-git clone <repo-url> cc-buddy-forge
+git clone https://github.com/Snychng/cc-buddy-forge.git
 cd cc-buddy-forge
 bun install
 
