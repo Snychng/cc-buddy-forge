@@ -35,7 +35,6 @@ program
   .option('--min-stat <stat:value>', 'Minimum stat value (e.g., WISDOM:80)')
   .option('--total <n>', 'Number of salts to try', '1000000')
   .option('--user-id <id>', 'Override userId (auto-detected by default)')
-  .option('--compact', 'Use compact salt format (<=15 chars) for binary patching')
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
 
@@ -67,17 +66,15 @@ program
     }
 
     const total = parseInt(opts.total, 10)
-    const compact = opts.compact ?? false
     console.log(`🔑 userId: ${userId}`)
     console.log(`🎯 Filter: ${JSON.stringify(filter)}`)
-    console.log(`📊 Searching ${total.toLocaleString()} salt values...${compact ? ' (compact mode for binary patching)' : ''}\n`)
+    console.log(`📊 Searching ${total.toLocaleString()} salt values...\n`)
 
     const instance = render(
       <SearchView
         userId={userId}
         filter={filter}
         total={total}
-        compact={compact}
         onDone={(results) => {
           instance.unmount()
           if (results.length === 0) {
@@ -133,7 +130,7 @@ program
 
     if (opts.salt.length !== 15) {
       console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars. Binary patching requires exactly 15 chars.`)
-      console.error(`   Use "ccbf search --compact" to find compatible salts.`)
+      console.error(`   Use "ccbf search" to find compatible salts.`)
       process.exit(1)
     }
 

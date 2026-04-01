@@ -1,7 +1,7 @@
 // Salt brute-force search engine with target attribute filtering
 
 import type { SearchFilter, SearchResult } from './types.js'
-import { ORIGINAL_SALT, rollWithSalt } from './roller.js'
+import { rollWithSalt } from './roller.js'
 
 function matchesFilter(result: SearchResult, filter: SearchFilter): boolean {
   const { bones } = result.roll
@@ -28,25 +28,18 @@ export type SearchOptions = {
   userId: string
   filter: SearchFilter
   total?: number // default 1_000_000
-  prefix?: string // salt prefix, default ORIGINAL_SALT
   onProgress?: (progress: SearchProgress) => void
   batchSize?: number // how many to process before yielding, default 10000
-  /** Max salt length — for binary patching, must be <= 15 */
-  maxSaltLen?: number
 }
 
 /**
  * Generate a salt string from index.
- * If maxSaltLen is set, generates exactly 15-char salts: "ccbf-" + zero-padded number
- * This ensures binary patching replaces bytes 1:1 with no null padding needed.
- * Otherwise uses original format: "{prefix}-{i}"
+ * Always generates exactly 15-char salts: "ccbf-" + 10-digit zero-padded number
+ * This matches the original salt length (friend-2026-401 = 15 chars) so binary
+ * patching can do byte-for-byte replacement safely.
  */
-function makeSalt(i: number, prefix: string, maxSaltLen?: number): string {
-  if (maxSaltLen) {
-    // Exactly 15 chars: "ccbf-" (5) + 10-digit zero-padded number = 15
-    return `ccbf-${i.toString().padStart(10, '0')}`
-  }
-  return `${prefix}-${i}`
+function makeSalt(i: number): string {
+  return `ccbf-${i.toString().padStart(10, '0')}`
 }
 
 export function search(opts: SearchOptions): SearchResult[] {
@@ -54,10 +47,8 @@ export function search(opts: SearchOptions): SearchResult[] {
     userId,
     filter,
     total = 1_000_000,
-    prefix = ORIGINAL_SALT,
     onProgress,
     batchSize = 10_000,
-    maxSaltLen,
   } = opts
 
   const matches: SearchResult[] = []
@@ -65,7 +56,7 @@ export function search(opts: SearchOptions): SearchResult[] {
   let lastCount = 0
 
   for (let i = 0; i < total; i++) {
-    const salt = makeSalt(i, prefix, maxSaltLen)
+    const salt = makeSalt(i)
     const roll = rollWithSalt(userId, salt)
     const result: SearchResult = { salt, roll }
 
@@ -98,17 +89,15 @@ export async function searchAsync(opts: SearchOptions): Promise<SearchResult[]> 
     userId,
     filter,
     total = 1_000_000,
-    prefix = ORIGINAL_SALT,
     onProgress,
     batchSize = 10_000,
-    maxSaltLen,
   } = opts
 
   const matches: SearchResult[] = []
   let startTime = performance.now()
 
   for (let i = 0; i < total; i++) {
-    const salt = makeSalt(i, prefix, maxSaltLen)
+    const salt = makeSalt(i)
     const roll = rollWithSalt(userId, salt)
     const result: SearchResult = { salt, roll }
 
