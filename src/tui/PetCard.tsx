@@ -44,6 +44,11 @@ export function PetCard({ bones, salt, compact, selected }: Props) {
           {stars} {bones.rarity.toUpperCase()} {bones.species.toUpperCase()}
           {bones.shiny ? ' ✨' : ''}
         </Text>
+        <Box flexDirection="column" marginY={1}>
+          {sprite.map((line, i) => (
+            <Text key={i} color={bones.shiny ? 'yellow' : undefined}>{line}</Text>
+          ))}
+        </Box>
         <Text>Eye: <Text bold>{bones.eye}</Text>  Hat: <Text bold>{bones.hat}</Text></Text>
         <Text>
           DBG {String(bones.stats.DEBUGGING).padStart(3)}  PAT {String(bones.stats.PATIENCE).padStart(3)}
