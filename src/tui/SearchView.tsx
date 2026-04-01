@@ -9,6 +9,7 @@ type Props = {
   userId: string
   filter: SearchFilter
   total: number
+  compact?: boolean
   onDone?: (results: SearchResult[]) => void
 }
 
@@ -24,7 +25,7 @@ function ProgressBar({ current, total }: { current: number; total: number }) {
   )
 }
 
-export function SearchView({ userId, filter, total, onDone }: Props) {
+export function SearchView({ userId, filter, total, compact, onDone }: Props) {
   const [progress, setProgress] = useState<SearchProgress>({
     current: 0, total, matches: [], speed: 0,
   })
@@ -36,6 +37,7 @@ export function SearchView({ userId, filter, total, onDone }: Props) {
       filter,
       total,
       onProgress: setProgress,
+      maxSaltLen: compact ? 15 : undefined,
     }).then(results => {
       setDone(true)
       onDone?.(results)

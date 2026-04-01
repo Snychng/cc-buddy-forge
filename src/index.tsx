@@ -8,6 +8,8 @@ import type { SearchFilter, Species, Rarity, Eye, Hat, StatName } from './core/t
 import { SearchView } from './tui/SearchView.js'
 import { PreviewView } from './tui/PreviewView.js'
 import { ApplyView } from './tui/ApplyView.js'
+import { applyBinary, restoreBinary, findClaudeBinary, ORIGINAL_SALT } from './core/apply.js'
+import { rollWithSalt } from './core/roller.js'
 
 /** Restore cursor visibility on exit — ink hides it and may not restore it */
 function restoreCursor() {
@@ -33,6 +35,7 @@ program
   .option('--min-stat <stat:value>', 'Minimum stat value (e.g., WISDOM:80)')
   .option('--total <n>', 'Number of salts to try', '1000000')
   .option('--user-id <id>', 'Override userId (auto-detected by default)')
+  .option('--compact', 'Use compact salt format (<=15 chars) for binary patching')
   .action((opts) => {
     const userId = opts.userId ?? detectUserId()
 
@@ -64,15 +67,17 @@ program
     }
 
     const total = parseInt(opts.total, 10)
+    const compact = opts.compact ?? false
     console.log(`🔑 userId: ${userId}`)
     console.log(`🎯 Filter: ${JSON.stringify(filter)}`)
-    console.log(`📊 Searching ${total.toLocaleString()} salt values...\n`)
+    console.log(`📊 Searching ${total.toLocaleString()} salt values...${compact ? ' (compact mode for binary patching)' : ''}\n`)
 
     const instance = render(
       <SearchView
         userId={userId}
         filter={filter}
         total={total}
+        compact={compact}
         onDone={(results) => {
           instance.unmount()
           if (results.length === 0) {
@@ -115,6 +120,54 @@ program
         onExit={() => process.exit(0)}
       />
     )
+  })
+
+program
+  .command('patch')
+  .description('Patch the installed Claude Code binary directly (no rebuild needed)')
+  .requiredOption('--salt <salt>', 'Salt value to apply (max 15 chars)')
+  .option('--binary <path>', 'Path to claude binary (auto-detected)')
+  .option('--user-id <id>', 'Override userId')
+  .action((opts) => {
+    const userId = opts.userId ?? detectUserId()
+
+    if (opts.salt.length > 15) {
+      console.error(`❌ Salt "${opts.salt}" is ${opts.salt.length} chars. Binary patching requires <= 15 chars.`)
+      console.error(`   Use "ccbf search --compact" to find compatible salts.`)
+      process.exit(1)
+    }
+
+    // Preview what the pet will look like
+    const roll = rollWithSalt(userId, opts.salt)
+    console.log(`🔑 userId: ${userId}`)
+    console.log(`🧂 salt: ${opts.salt}`)
+    console.log(`🐾 Result: ${roll.bones.rarity} ${roll.bones.species}${roll.bones.shiny ? ' ✨' : ''}\n`)
+
+    try {
+      const result = applyBinary(opts.salt, opts.binary)
+      console.log(`✅ Patched ${result.patchCount} occurrence(s) in ${result.filePath}`)
+      console.log(`   Old: ${result.oldSalt} → New: ${opts.salt}`)
+      console.log(`\n   Restart Claude Code to see your new buddy!`)
+    } catch (err) {
+      console.error(`❌ ${err instanceof Error ? err.message : err}`)
+      process.exit(1)
+    }
+  })
+
+program
+  .command('restore')
+  .description('Restore the original salt in the Claude Code binary')
+  .requiredOption('--salt <salt>', 'The current (patched) salt to find and replace')
+  .option('--binary <path>', 'Path to claude binary (auto-detected)')
+  .action((opts) => {
+    try {
+      const result = restoreBinary(opts.salt, opts.binary)
+      console.log(`✅ Restored ${result.patchCount} occurrence(s) in ${result.filePath}`)
+      console.log(`   Restored to original: ${ORIGINAL_SALT}`)
+    } catch (err) {
+      console.error(`❌ ${err instanceof Error ? err.message : err}`)
+      process.exit(1)
+    }
   })
 
 program.parse()
